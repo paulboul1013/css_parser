@@ -126,3 +126,54 @@ consume_codepoint() 推進管線:
 ./css_parse --tokens tests/basic.css   # 傾印 token 流
 ./css_parse tests/basic.css            # 預設模式（未來做完整解析）
 ```
+
+## Task 4: 空白/標點/Comment token
+
+### 背景知識
+
+- **CSS Syntax §4.3.1 Token 分發**: `css_tokenizer_next()` 讀取 `current` code point，根據字元類型分派到不同的 token 產生邏輯
+- **CSS Syntax §4.3.2 註解消耗**: 在每次 token 分發前，先檢查是否為 `/*` 開頭的註解，若是則消耗到 `*/` 或 EOF。註解不產生 token（被靜默消耗）
+- **未結束的註解**: 若在找到 `*/` 之前遇到 EOF，這是一個解析錯誤（parse error）
+- **空白 token**: 連續的空白字元（空格、Tab、換行）合併為單一 `CSS_TOKEN_WHITESPACE`
+- **分隔符號 token**: `{`, `}`, `(`, `)`, `[`, `]`, `:`, `;`, `,` 各自對應獨立的 token 類型
+- **Delim token**: 目前未處理的字元（字母、數字、`#`、`@` 等）暫時作為 `CSS_TOKEN_DELIM` 輸出，後續 Task 會實作完整的 ident/number/string 等 token
+
+### Code Point 分類輔助函式
+
+```c
+is_whitespace(c)    // '\n', '\t', ' '
+is_digit(c)         // '0'–'9'
+is_hex_digit(c)     // 0–9, A–F, a–f
+is_letter(c)        // A–Z, a–z
+is_non_ascii(c)     // >= 0x80 且非 EOF
+is_ident_start(c)   // 字母、non-ASCII、底線
+is_ident_char(c)    // ident_start + 數字 + 連字號
+is_non_printable(c) // 0x00–0x08, 0x0B, 0x0E–0x1F, 0x7F
+```
+
+### 新增內部函式
+
+- `static void css_parse_error(css_tokenizer *t, const char *msg)` — 若設定 `CSSPARSER_PARSE_ERRORS` 環境變數，印出錯誤訊息到 stderr
+- `static void consume_comments(css_tokenizer *t)` — 消耗 `/* ... */` 註解（可連續多個）
+- `static css_token *make_token(css_token_type type, size_t line, size_t col)` — 建立帶有行列資訊的 token
+
+### 流程架構
+
+```
+css_tokenizer_next():
+  1. consume_comments() — 消耗所有連續的註解
+  2. 讀取 current code point
+  3. 分派:
+     - EOF → CSS_TOKEN_EOF
+     - 空白 → 消耗連續空白 → CSS_TOKEN_WHITESPACE
+     - ( ) [ ] { } : ; , → 對應的標點 token
+     - 其他 → CSS_TOKEN_DELIM（暫時）
+```
+
+### 測試
+
+```bash
+./css_parse --tokens tests/tokens_basic.css   # 測試標點、空白、註解
+./css_parse --tokens tests/basic.css          # 測試真實 CSS（字母暫為 delim）
+CSSPARSER_PARSE_ERRORS=1 ./css_parse --tokens <未結束註解檔案>  # 測試錯誤報告
+```

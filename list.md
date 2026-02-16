@@ -29,7 +29,14 @@
 
 ## 未完成
 
-- [ ] Task 4: 空白/標點/Comment token
+- [x] Task 4: 空白/標點/Comment token
+  - Code point 分類輔助函式 (is_whitespace, is_digit, is_letter 等)
+  - 註解消耗 (consume_comments, CSS Syntax §4.3.2)
+  - 解析錯誤輔助函式 (css_parse_error, CSSPARSER_PARSE_ERRORS 環境變數)
+  - Token 分發主迴圈 (空白、標點、delim fallback)
+  - make_token 輔助函式
+  - 測試檔案 (tests/tokens_basic.css)
+  - 編譯零警告驗證通過
 - [ ] Task 5: 數值 token
 - [ ] Task 6: Ident/Function/Hash/At token
 - [ ] Task 7: String 和 URL token
