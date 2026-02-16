@@ -11,10 +11,24 @@
   - 測試檔案 (tests/basic.css)
   - 編譯零警告驗證通過
 
+- [x] Task 2: Token 結構與生命週期
+  - 24 種 token 類型 (css_token_type 列舉)
+  - css_token 結構 (value, numeric_value, unit, hash_type, delim_codepoint, line, column)
+  - css_token_create() / css_token_free() / css_token_type_name()
+  - css_number_type / css_hash_type 列舉
+
+- [x] Task 3: Tokenizer 前處理與 UTF-8 解碼
+  - css_tokenizer 結構 (input, length, pos, current/peek1/peek2/peek3, line, column, reconsume)
+  - 前處理 (CRLF→LF, CR→LF, FF→LF, NULL→U+FFFD)
+  - UTF-8 解碼器 (1~4 位元組, overlong 檢查, 無效序列→U+FFFD)
+  - 4 格先行查看管線 (fill_lookahead, consume_codepoint)
+  - css_tokenizer_create() / css_tokenizer_next() (暫時只回傳 EOF) / css_tokenizer_free()
+  - CLI --tokens 模式 (css_parse_demo.c)
+  - 測試檔案 (tests/preprocess_test.css, tests/preprocess_edge.css)
+  - 編譯零警告驗證通過
+
 ## 未完成
 
-- [ ] Task 2: Token 結構與生命週期
-- [ ] Task 3: Tokenizer 前處理與 UTF-8
 - [ ] Task 4: 空白/標點/Comment token
 - [ ] Task 5: 數值 token
 - [ ] Task 6: Ident/Function/Hash/At token
