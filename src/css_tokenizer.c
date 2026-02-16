@@ -1,6 +1,58 @@
 #include "css_tokenizer.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+/* ---------- Code point classification helpers ---------- */
+
+static bool is_whitespace(uint32_t c)
+{
+    return c == '\n' || c == '\t' || c == ' ';
+}
+
+static bool is_digit(uint32_t c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static bool is_hex_digit(uint32_t c)
+{
+    return is_digit(c) || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+}
+
+static bool is_letter(uint32_t c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+static bool is_non_ascii(uint32_t c)
+{
+    return c >= 0x80 && c != CSS_EOF_CODEPOINT;
+}
+
+static bool is_ident_start(uint32_t c)
+{
+    return is_letter(c) || is_non_ascii(c) || c == '_';
+}
+
+static bool is_ident_char(uint32_t c)
+{
+    return is_ident_start(c) || is_digit(c) || c == '-';
+}
+
+static bool is_non_printable(uint32_t c)
+{
+    return (c <= 0x08) || c == 0x0B || (c >= 0x0E && c <= 0x1F) || c == 0x7F;
+}
+
+/* Suppress unused warnings for helpers used in future tasks */
+static inline void unused_helpers_(void)
+{
+    (void)is_hex_digit;
+    (void)is_ident_start;
+    (void)is_ident_char;
+    (void)is_non_printable;
+}
 
 /* ---------- UTF-8 decode ---------- */
 
@@ -207,6 +259,50 @@ static char *preprocess(const char *input, size_t length, size_t *out_len)
     return buf;
 }
 
+/* ---------- Parse error helper ---------- */
+
+static void css_parse_error(css_tokenizer *t, const char *msg)
+{
+    if (getenv("CSSPARSER_PARSE_ERRORS")) {
+        fprintf(stderr, "CSS parse error at %zu:%zu: %s\n",
+                t->line, t->column, msg);
+    }
+}
+
+/* ---------- Comment consumption (CSS Syntax §4.3.2) ---------- */
+
+static void consume_comments(css_tokenizer *t)
+{
+    while (t->current == '/' && t->peek1 == '*') {
+        consume_codepoint(t); /* consume '/' */
+        consume_codepoint(t); /* consume '*' */
+        for (;;) {
+            if (t->current == CSS_EOF_CODEPOINT) {
+                css_parse_error(t, "unterminated comment");
+                return;
+            }
+            if (t->current == '*' && t->peek1 == '/') {
+                consume_codepoint(t); /* consume '*' */
+                consume_codepoint(t); /* consume '/' */
+                break;
+            }
+            consume_codepoint(t);
+        }
+    }
+}
+
+/* ---------- Token creation helper ---------- */
+
+static css_token *make_token(css_token_type type, size_t line, size_t col)
+{
+    css_token *tok = css_token_create(type);
+    if (tok) {
+        tok->line   = line;
+        tok->column = col;
+    }
+    return tok;
+}
+
 /* ---------- Public API ---------- */
 
 css_tokenizer *css_tokenizer_create(const char *input, size_t length)
@@ -235,12 +331,48 @@ css_tokenizer *css_tokenizer_create(const char *input, size_t length)
 
 css_token *css_tokenizer_next(css_tokenizer *t)
 {
-    /* TODO: full token dispatch */
-    (void)consume_codepoint;  /* suppress unused warning until dispatch is implemented */
-    css_token *tok = css_token_create(CSS_TOKEN_EOF);
+    /* Suppress unused helpers (used in future tasks) */
+    (void)unused_helpers_;
+
+    /* Consume comments first (CSS Syntax §4.3.2) */
+    consume_comments(t);
+
+    uint32_t c = t->current;
+    size_t tok_line = t->line;
+    size_t tok_col  = t->column;
+
+    /* EOF */
+    if (c == CSS_EOF_CODEPOINT) {
+        return make_token(CSS_TOKEN_EOF, tok_line, tok_col);
+    }
+
+    /* Whitespace token: consume consecutive whitespace */
+    if (is_whitespace(c)) {
+        consume_codepoint(t);
+        while (is_whitespace(t->current)) {
+            consume_codepoint(t);
+        }
+        return make_token(CSS_TOKEN_WHITESPACE, tok_line, tok_col);
+    }
+
+    /* Single-character tokens */
+    if (c == '(') { consume_codepoint(t); return make_token(CSS_TOKEN_OPEN_PAREN,   tok_line, tok_col); }
+    if (c == ')') { consume_codepoint(t); return make_token(CSS_TOKEN_CLOSE_PAREN,  tok_line, tok_col); }
+    if (c == '[') { consume_codepoint(t); return make_token(CSS_TOKEN_OPEN_SQUARE,  tok_line, tok_col); }
+    if (c == ']') { consume_codepoint(t); return make_token(CSS_TOKEN_CLOSE_SQUARE, tok_line, tok_col); }
+    if (c == '{') { consume_codepoint(t); return make_token(CSS_TOKEN_OPEN_CURLY,   tok_line, tok_col); }
+    if (c == '}') { consume_codepoint(t); return make_token(CSS_TOKEN_CLOSE_CURLY,  tok_line, tok_col); }
+    if (c == ':') { consume_codepoint(t); return make_token(CSS_TOKEN_COLON,        tok_line, tok_col); }
+    if (c == ';') { consume_codepoint(t); return make_token(CSS_TOKEN_SEMICOLON,    tok_line, tok_col); }
+    if (c == ',') { consume_codepoint(t); return make_token(CSS_TOKEN_COMMA,        tok_line, tok_col); }
+
+    /* Everything else: delim token (ident, number, etc. handled in future tasks) */
+    consume_codepoint(t);
+    css_token *tok = css_token_create(CSS_TOKEN_DELIM);
     if (tok) {
-        tok->line   = t->line;
-        tok->column = t->column;
+        tok->delim_codepoint = c;
+        tok->line   = tok_line;
+        tok->column = tok_col;
     }
     return tok;
 }
