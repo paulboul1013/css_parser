@@ -58,7 +58,27 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Token allocation failed\n");
                 break;
             }
-            printf("<%s>\n", css_token_type_name(tok->type));
+            /* Enhanced display for numeric tokens */
+            if (tok->type == CSS_TOKEN_NUMBER) {
+                if (tok->number_type == CSS_NUM_INTEGER)
+                    printf("<number %d>\n", (int)tok->numeric_value);
+                else
+                    printf("<number %g>\n", tok->numeric_value);
+            } else if (tok->type == CSS_TOKEN_PERCENTAGE) {
+                if (tok->number_type == CSS_NUM_INTEGER)
+                    printf("<percentage %d>\n", (int)tok->numeric_value);
+                else
+                    printf("<percentage %g>\n", tok->numeric_value);
+            } else if (tok->type == CSS_TOKEN_DIMENSION) {
+                if (tok->number_type == CSS_NUM_INTEGER)
+                    printf("<dimension %d \"%s\">\n", (int)tok->numeric_value, tok->unit ? tok->unit : "");
+                else
+                    printf("<dimension %g \"%s\">\n", tok->numeric_value, tok->unit ? tok->unit : "");
+            } else if (tok->type == CSS_TOKEN_DELIM) {
+                printf("<delim '%c'>\n", (char)tok->delim_codepoint);
+            } else {
+                printf("<%s>\n", css_token_type_name(tok->type));
+            }
             bool is_eof = (tok->type == CSS_TOKEN_EOF);
             css_token_free(tok);
             if (is_eof) break;

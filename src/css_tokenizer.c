@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "css_tokenizer.h"
 #include <stdlib.h>
 #include <string.h>
@@ -48,9 +49,6 @@ static bool is_non_printable(uint32_t c)
 /* Suppress unused warnings for helpers used in future tasks */
 static inline void unused_helpers_(void)
 {
-    (void)is_hex_digit;
-    (void)is_ident_start;
-    (void)is_ident_char;
     (void)is_non_printable;
 }
 
@@ -291,6 +289,208 @@ static void consume_comments(css_tokenizer *t)
     }
 }
 
+/* ---------- Check helpers (§4.3.7–§4.3.12) ---------- */
+
+/* §4.3.8: Two code points are a valid escape? */
+static bool valid_escape(uint32_t c1, uint32_t c2)
+{
+    return c1 == '\\' && c2 != '\n';
+}
+
+/* §4.3.10: Three code points would start a number? */
+static bool starts_number(uint32_t c1, uint32_t c2, uint32_t c3)
+{
+    if (c1 == '+' || c1 == '-') {
+        if (is_digit(c2)) return true;
+        if (c2 == '.' && is_digit(c3)) return true;
+        return false;
+    }
+    if (c1 == '.') {
+        return is_digit(c2);
+    }
+    return is_digit(c1);
+}
+
+/* §4.3.9: Three code points would start an ident sequence? */
+static bool starts_ident_sequence(uint32_t c1, uint32_t c2, uint32_t c3)
+{
+    if (c1 == '-') {
+        return is_ident_start(c2) || c2 == '-' || valid_escape(c2, c3);
+    }
+    if (is_ident_start(c1)) return true;
+    if (c1 == '\\') return valid_escape(c1, c2);
+    return false;
+}
+
+/* Encode a code point as UTF-8 into buf. Returns bytes written. */
+static size_t encode_utf8(uint32_t cp, char *buf, size_t buf_size)
+{
+    if (cp < 0x80 && buf_size >= 1) {
+        buf[0] = (char)cp;
+        return 1;
+    } else if (cp < 0x800 && buf_size >= 2) {
+        buf[0] = (char)(0xC0 | (cp >> 6));
+        buf[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    } else if (cp < 0x10000 && buf_size >= 3) {
+        buf[0] = (char)(0xE0 | (cp >> 12));
+        buf[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    } else if (cp <= 0x10FFFF && buf_size >= 4) {
+        buf[0] = (char)(0xF0 | (cp >> 18));
+        buf[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+        buf[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        buf[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    return 0;
+}
+
+/* §4.3.7: Consume an escaped code point */
+static uint32_t consume_escaped_codepoint(css_tokenizer *t)
+{
+    if (t->current == CSS_EOF_CODEPOINT) {
+        css_parse_error(t, "EOF in escape");
+        return 0xFFFD;
+    }
+    if (is_hex_digit(t->current)) {
+        uint32_t value = 0;
+        int count = 0;
+        while (is_hex_digit(t->current) && count < 6) {
+            uint32_t d;
+            if (t->current >= '0' && t->current <= '9') d = t->current - '0';
+            else if (t->current >= 'A' && t->current <= 'F') d = t->current - 'A' + 10;
+            else d = t->current - 'a' + 10;
+            value = value * 16 + d;
+            consume_codepoint(t);
+            count++;
+        }
+        /* Optional trailing whitespace */
+        if (is_whitespace(t->current)) consume_codepoint(t);
+        /* Validate */
+        if (value == 0 || value > 0x10FFFF || (value >= 0xD800 && value <= 0xDFFF))
+            return 0xFFFD;
+        return value;
+    }
+    uint32_t cp = t->current;
+    consume_codepoint(t);
+    return cp;
+}
+
+/* §4.3.12: Consume a number. Sets *out_type to integer or number. */
+static double consume_number(css_tokenizer *t, css_number_type *out_type)
+{
+    *out_type = CSS_NUM_INTEGER;
+
+    char repr[128];
+    size_t ri = 0;
+
+    /* Optional sign */
+    if (t->current == '+' || t->current == '-') {
+        repr[ri++] = (char)t->current;
+        consume_codepoint(t);
+    }
+
+    /* Integer part: digits */
+    while (is_digit(t->current)) {
+        repr[ri++] = (char)t->current;
+        consume_codepoint(t);
+    }
+
+    /* Decimal part: '.' followed by digits */
+    if (t->current == '.' && is_digit(t->peek1)) {
+        *out_type = CSS_NUM_NUMBER;
+        repr[ri++] = '.';
+        consume_codepoint(t); /* consume '.' */
+        while (is_digit(t->current)) {
+            repr[ri++] = (char)t->current;
+            consume_codepoint(t);
+        }
+    }
+
+    /* Exponent part: 'e' or 'E', optional sign, digits */
+    if ((t->current == 'e' || t->current == 'E') &&
+        (is_digit(t->peek1) ||
+         ((t->peek1 == '+' || t->peek1 == '-') && is_digit(t->peek2)))) {
+        *out_type = CSS_NUM_NUMBER;
+        repr[ri++] = (char)t->current;
+        consume_codepoint(t); /* consume 'e'/'E' */
+        if (t->current == '+' || t->current == '-') {
+            repr[ri++] = (char)t->current;
+            consume_codepoint(t);
+        }
+        while (is_digit(t->current)) {
+            repr[ri++] = (char)t->current;
+            consume_codepoint(t);
+        }
+    }
+
+    repr[ri] = '\0';
+    return strtod(repr, NULL);
+}
+
+/* §4.3.11: Consume an ident sequence, return as strdup'd string */
+static char *consume_ident_sequence(css_tokenizer *t)
+{
+    char buf[256];
+    size_t len = 0;
+
+    while (len < sizeof(buf) - 4) { /* leave room for UTF-8 */
+        if (is_ident_char(t->current)) {
+            buf[len++] = (char)t->current;
+            consume_codepoint(t);
+        } else if (valid_escape(t->current, t->peek1)) {
+            consume_codepoint(t); /* consume backslash */
+            uint32_t cp = consume_escaped_codepoint(t);
+            len += encode_utf8(cp, buf + len, sizeof(buf) - len);
+        } else {
+            break;
+        }
+    }
+    buf[len] = '\0';
+    return strdup(buf);
+}
+
+/* §4.3.3: Consume a numeric token */
+static css_token *consume_numeric_token(css_tokenizer *t)
+{
+    size_t tok_line = t->line, tok_col = t->column;
+
+    css_number_type num_type;
+    double value = consume_number(t, &num_type);
+
+    /* Check for dimension: starts_ident_sequence? */
+    if (starts_ident_sequence(t->current, t->peek1, t->peek2)) {
+        css_token *tok = css_token_create(CSS_TOKEN_DIMENSION);
+        tok->numeric_value = value;
+        tok->number_type = num_type;
+        tok->unit = consume_ident_sequence(t);
+        tok->line = tok_line;
+        tok->column = tok_col;
+        return tok;
+    }
+
+    /* Check for percentage */
+    if (t->current == '%') {
+        consume_codepoint(t);
+        css_token *tok = css_token_create(CSS_TOKEN_PERCENTAGE);
+        tok->numeric_value = value;
+        tok->number_type = num_type;
+        tok->line = tok_line;
+        tok->column = tok_col;
+        return tok;
+    }
+
+    /* Plain number */
+    css_token *tok = css_token_create(CSS_TOKEN_NUMBER);
+    tok->numeric_value = value;
+    tok->number_type = num_type;
+    tok->line = tok_line;
+    tok->column = tok_col;
+    return tok;
+}
+
 /* ---------- Token creation helper ---------- */
 
 static css_token *make_token(css_token_type type, size_t line, size_t col)
@@ -366,7 +566,36 @@ css_token *css_tokenizer_next(css_tokenizer *t)
     if (c == ';') { consume_codepoint(t); return make_token(CSS_TOKEN_SEMICOLON,    tok_line, tok_col); }
     if (c == ',') { consume_codepoint(t); return make_token(CSS_TOKEN_COMMA,        tok_line, tok_col); }
 
-    /* Everything else: delim token (ident, number, etc. handled in future tasks) */
+    /* Digit -> numeric token */
+    if (is_digit(c)) {
+        return consume_numeric_token(t);
+    }
+
+    /* '+' -> might start number */
+    if (c == '+') {
+        if (starts_number(c, t->peek1, t->peek2)) {
+            return consume_numeric_token(t);
+        }
+        /* else fall through to delim */
+    }
+
+    /* '-' -> might start number (ident handling comes in Task 6) */
+    if (c == '-') {
+        if (starts_number(c, t->peek1, t->peek2)) {
+            return consume_numeric_token(t);
+        }
+        /* else fall through to delim (ident/CDC handling in Task 6) */
+    }
+
+    /* '.' -> might start number */
+    if (c == '.') {
+        if (starts_number(c, t->peek1, t->peek2)) {
+            return consume_numeric_token(t);
+        }
+        /* else fall through to delim */
+    }
+
+    /* Everything else: delim token (ident, string, etc. handled in future tasks) */
     consume_codepoint(t);
     css_token *tok = css_token_create(CSS_TOKEN_DELIM);
     if (tok) {

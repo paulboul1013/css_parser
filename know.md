@@ -177,3 +177,81 @@ css_tokenizer_next():
 ./css_parse --tokens tests/basic.css          # 測試真實 CSS（字母暫為 delim）
 CSSPARSER_PARSE_ERRORS=1 ./css_parse --tokens <未結束註解檔案>  # 測試錯誤報告
 ```
+
+## Task 5: 數值 token (number/percentage/dimension)
+
+### 背景知識
+
+- **CSS Syntax §4.3.3 consume_numeric_token**: 消耗數字後，根據後續字元判斷產生 number、percentage 或 dimension token
+- **CSS Syntax §4.3.7 consume_escaped_codepoint**: 消耗跳脫序列，支援十六進位跳脫（最多 6 位 hex digit）和一般字元跳脫
+- **CSS Syntax §4.3.8 valid_escape**: 判斷兩個 code point 是否構成有效跳脫（反斜線後接非換行字元）
+- **CSS Syntax §4.3.9 starts_ident_sequence**: 判斷三個 code point 是否能開始一個 ident 序列
+- **CSS Syntax §4.3.10 starts_number**: 判斷三個 code point 是否能開始一個數字
+- **CSS Syntax §4.3.11 consume_ident_sequence**: 消耗 ident 字元序列，用於讀取 dimension 單位名稱
+- **CSS Syntax §4.3.12 consume_number**: 消耗數字，包含可選正負號、整數部分、小數部分、指數部分
+
+### 數字格式
+
+```
+[+|-] digits [. digits] [(e|E) [+|-] digits]
+```
+
+- 整數: `42`, `-10`, `+5`
+- 浮點數: `0.5`, `1.5`, `.5`（前綴零可省略）
+- 科學記號: `3e2` = 300, `1.5E-3` = 0.0015
+
+### Token 類型判斷
+
+```
+consume_number() → 取得數值
+  ├─ 後接 starts_ident_sequence → CSS_TOKEN_DIMENSION（如 100px, 1.5em）
+  ├─ 後接 '%' → CSS_TOKEN_PERCENTAGE（如 50%）
+  └─ 其他 → CSS_TOKEN_NUMBER（如 42, 0.5）
+```
+
+### number_type 區分
+
+- `CSS_NUM_INTEGER`: 沒有小數點且沒有指數部分（如 42, -10）
+- `CSS_NUM_NUMBER`: 有小數點或指數部分（如 0.5, 3e2）
+
+### 新增內部函式
+
+- `static bool valid_escape(uint32_t c1, uint32_t c2)` — 判斷有效跳脫
+- `static bool starts_number(uint32_t c1, uint32_t c2, uint32_t c3)` — 判斷數字開頭
+- `static bool starts_ident_sequence(uint32_t c1, uint32_t c2, uint32_t c3)` — 判斷 ident 序列開頭
+- `static size_t encode_utf8(uint32_t cp, char *buf, size_t buf_size)` — 將 code point 編碼為 UTF-8
+- `static uint32_t consume_escaped_codepoint(css_tokenizer *t)` — 消耗跳脫 code point
+- `static double consume_number(css_tokenizer *t, css_number_type *out_type)` — 消耗數字
+- `static char *consume_ident_sequence(css_tokenizer *t)` — 消耗 ident 序列（回傳 strdup 字串）
+- `static css_token *consume_numeric_token(css_tokenizer *t)` — 消耗數值 token
+
+### 分發邏輯更新
+
+```
+css_tokenizer_next() 分發（在 delim 之前）:
+  - 數字 → consume_numeric_token()
+  - '+' 且 starts_number → consume_numeric_token()
+  - '-' 且 starts_number → consume_numeric_token()
+  - '.' 且 starts_number → consume_numeric_token()
+```
+
+### `_POSIX_C_SOURCE`
+
+- 為了使用 `strdup()` 函式，需要在 css_tokenizer.c 頂部定義 `#define _POSIX_C_SOURCE 200809L`
+- `strdup()` 是 POSIX 函式，不在 C11 標準中，需要此巨集才能在 `-std=c11 -pedantic` 下取得宣告
+
+### 測試
+
+```bash
+./css_parse --tokens tests/tokens_numeric.css
+# 預期: 100px → <dimension 100 "px">, 50% → <percentage 50>,
+#        0.5 → <number 0.5>, 42 → <number 42>, -10px → <dimension -10 "px">,
+#        .5 → <number 0.5>, 3e2 → <number 300>
+```
+
+### --tokens 增強輸出格式
+
+- `<number 42>` / `<number 3.14>` — 整數顯示為整數，浮點顯示 %g
+- `<percentage 50>` — 百分比顯示數值
+- `<dimension 10 "px">` — dimension 顯示數值和單位
+- `<delim 'c'>` — delim 顯示字元

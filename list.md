@@ -37,7 +37,18 @@
   - make_token 輔助函式
   - 測試檔案 (tests/tokens_basic.css)
   - 編譯零警告驗證通過
-- [ ] Task 5: 數值 token
+- [x] Task 5: 數值 token (number/percentage/dimension)
+  - 檢查輔助函式 (valid_escape, starts_number, starts_ident_sequence)
+  - UTF-8 編碼函式 (encode_utf8)
+  - 跳脫 code point 消耗 (consume_escaped_codepoint)
+  - 數字消耗 (consume_number: 整數/浮點/科學記號)
+  - Ident 序列消耗 (consume_ident_sequence: dimension 單位用)
+  - 數值 token 消耗 (consume_numeric_token: number/percentage/dimension)
+  - 分發邏輯更新 (digit/+/-/. 開頭的數字)
+  - --tokens 增強輸出 (number/percentage/dimension/delim 顯示值)
+  - _POSIX_C_SOURCE 200809L 定義（strdup 支援）
+  - 測試檔案 (tests/tokens_numeric.css)
+  - 編譯零警告驗證通過
 - [ ] Task 6: Ident/Function/Hash/At token
 - [ ] Task 7: String 和 URL token
 - [ ] Task 8: Tokenizer 完整性驗證

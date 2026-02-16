@@ -1,0 +1,13 @@
+.test {
+    width: 100px;
+    height: 50%;
+    opacity: 0.5;
+    z-index: 42;
+    font-size: 1.5em;
+    transition: 300ms;
+    line-height: 1.2;
+    margin: -10px;
+    padding: +5px;
+    flex: .5;
+    scale: 3e2;
+}
