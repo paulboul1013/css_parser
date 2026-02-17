@@ -358,3 +358,133 @@ consume_ident_like_token():
 #   "Helvetica Neue" → <string "Helvetica Neue">
 #   "escaped \"quote\"" → <string "escaped "quote"">
 ```
+
+## Task 9: AST 結構定義
+
+### 背景知識
+
+- **CSS Syntax §5**: 定義了 CSS 解析產生的抽象語法樹（AST）結構
+- **AST 節點類型**: 7 種節點類型
+  - `CSS_NODE_STYLESHEET` — 頂層節點，包含規則列表
+  - `CSS_NODE_AT_RULE` — @規則（如 @media, @import）
+  - `CSS_NODE_QUALIFIED_RULE` — 合格規則（如選擇器 + 宣告區塊）
+  - `CSS_NODE_DECLARATION` — 宣告（如 color: red）
+  - `CSS_NODE_COMPONENT_VALUE` — 元件值（保留的 token）
+  - `CSS_NODE_SIMPLE_BLOCK` — 簡單區塊（{}, [], ()）
+  - `CSS_NODE_FUNCTION` — 函式（如 rgb(), calc()）
+
+- **CSS Syntax §5.3 Component Value**: 是 token / simple block / function 三者的聯合體
+  - 使用 `css_node_type` 判斷實際類型
+  - union 包含 token 指標、block 指標、function 指標
+
+- **CSS Syntax §5.4.8 Simple Block**: 由配對的括號包圍，包含子元件值列表
+  - `associated_token` 記錄開啟括號類型（{, [, (）
+  - 值列表使用動態陣列
+
+- **CSS Syntax §5.4.9 Function**: 名稱 + 參數值列表
+
+- **CSS Syntax §5.4.6 Declaration**: 屬性名 + 值列表 + !important 旗標
+
+- **CSS Syntax §5.4.2 At-rule**: 名稱 + prelude（前序元件值列表）+ 可選的 block
+  - 語句式 at-rule（如 @import）沒有 block，以分號結束
+  - 區塊式 at-rule（如 @media）有 block
+
+- **CSS Syntax §5.4.3 Qualified Rule**: prelude（選擇器）+ block（宣告區塊）
+
+- **Rule 包裝器**: css_rule 使用 union 包裝 at-rule 或 qualified rule
+
+### API 概覽
+
+#### 建立函式
+
+```c
+css_stylesheet *css_stylesheet_create(void);
+css_rule *css_rule_create_at(css_at_rule *ar);
+css_rule *css_rule_create_qualified(css_qualified_rule *qr);
+css_at_rule *css_at_rule_create(const char *name);
+css_qualified_rule *css_qualified_rule_create(void);
+css_declaration *css_declaration_create(const char *name);
+css_simple_block *css_simple_block_create(css_token_type associated);
+css_function *css_function_create(const char *name);
+css_component_value *css_component_value_create_token(css_token *token);
+css_component_value *css_component_value_create_block(css_simple_block *block);
+css_component_value *css_component_value_create_function(css_function *func);
+```
+
+- 所有建立函式使用 `calloc` 零初始化
+- 字串欄位使用 `strdup()` 取得擁有權
+
+#### 釋放函式
+
+```c
+void css_stylesheet_free(css_stylesheet *sheet);
+void css_rule_free(css_rule *rule);
+void css_at_rule_free(css_at_rule *ar);
+void css_qualified_rule_free(css_qualified_rule *qr);
+void css_declaration_free(css_declaration *decl);
+void css_simple_block_free(css_simple_block *block);
+void css_function_free(css_function *func);
+void css_component_value_free(css_component_value *cv);
+```
+
+- 全部 NULL 安全
+- 遞迴釋放子節點
+- `css_component_value_free` 根據 type 分派到正確的釋放函式
+
+#### 附加輔助函式（動態陣列）
+
+```c
+void css_stylesheet_append_rule(css_stylesheet *sheet, css_rule *rule);
+void css_at_rule_append_prelude(css_at_rule *ar, css_component_value *cv);
+void css_qualified_rule_append_prelude(css_qualified_rule *qr, css_component_value *cv);
+void css_simple_block_append_value(css_simple_block *block, css_component_value *cv);
+void css_function_append_value(css_function *func, css_component_value *cv);
+void css_declaration_append_value(css_declaration *decl, css_component_value *cv);
+```
+
+- 使用 realloc 擴容模式：`cap = cap ? cap * 2 : 4`
+- 全部 NULL 安全（傳入 NULL 不會 crash）
+
+#### 傾印函式
+
+```c
+void css_ast_dump(css_stylesheet *sheet, FILE *out);
+```
+
+- 以縮排形式輸出 AST 結構
+- 每層深度增加兩個空格
+
+### 記憶體管理模式
+
+```
+calloc(1, sizeof(type))     — 零初始化，cap/count 自動為 0
+strdup(name)                — 字串擁有權轉移
+realloc(ptr, new_cap * sz)  — 動態陣列擴容
+free(ptr->name)             — 釋放 strdup 的字串
+free(ptr->values)           — 釋放動態陣列
+free(ptr)                   — 釋放節點本身
+```
+
+### 傾印輸出格式
+
+```
+STYLESHEET
+  QUALIFIED_RULE
+    prelude:
+      <ident "body">
+    BLOCK {}
+      <ident "color">
+      <ident "red">
+  AT_RULE "media"
+    prelude:
+      <ident "screen">
+    BLOCK {}
+```
+
+### 測試
+
+```bash
+cc -std=c11 -Wall -Wextra -pedantic -O2 -g -Iinclude src/css_token.c src/css_ast.c tests/test_ast.c -o tests/test_ast
+./tests/test_ast
+# 測試: create/free/append/dump/NULL 安全性
+```

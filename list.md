@@ -68,8 +68,16 @@
   - --tokens 增強輸出 (string, bad-string, url, bad-url)
   - 測試檔案 (tests/tokens_string.css)
   - 編譯零警告驗證通過
-- [ ] Task 8: Tokenizer 完整性驗證
-- [ ] Task 9: AST 結構定義
+- [x] Task 8: Tokenizer 完整性驗證
+- [x] Task 9: AST 結構定義
+  - css_node_type 列舉（7 種節點類型）
+  - 完整結構定義（stylesheet, rule, at_rule, qualified_rule, declaration, simple_block, function, component_value）
+  - 建立函式（11 個 create 函式，calloc + strdup）
+  - 釋放函式（8 個 free 函式，NULL 安全，遞迴釋放）
+  - 附加輔助函式（6 個 append 函式，realloc 動態陣列）
+  - 傾印函式（css_ast_dump，縮排式 AST 輸出）
+  - 單元測試（tests/test_ast.c，12 個測試案例）
+  - 編譯零警告驗證通過
 - [ ] Task 10: Parser 骨架
 - [ ] Task 11: At-rule 和 Qualified rule
 - [ ] Task 12: Declaration 與 !important
