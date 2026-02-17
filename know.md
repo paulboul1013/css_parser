@@ -255,3 +255,106 @@ css_tokenizer_next() 分發（在 delim 之前）:
 - `<percentage 50>` — 百分比顯示數值
 - `<dimension 10 "px">` — dimension 顯示數值和單位
 - `<delim 'c'>` — delim 顯示字元
+
+## Task 6: Ident/Function/Hash/At token
+
+### 背景知識
+
+- **CSS Syntax §4.3.4 consume_ident_like_token**: 消耗 ident 序列後，判斷是否為函式呼叫（後接 `(`）或一般 ident token
+- **url() 特殊處理**: 若 ident 為 `url`（不分大小寫）且後接 `(`，需進一步判斷：
+  - 引號開頭 → function token（url 作為函式名稱，字串作為參數）
+  - 非引號 → url-token（Task 7 實作）
+- **Hash token (#)**: `#` 後接 ident 字元或有效跳脫 → hash token，若 starts_ident_sequence 則為 id 類型
+- **At-keyword (@)**: `@` 後接 starts_ident_sequence → at-keyword token
+- **CDC (--)>**: `-->` 三個字元 → CDC token
+- **CDO (<!--)**: `<!--` 四個字元 → CDO token
+- **反斜線跳脫**: `\` 後接有效跳脫 → 開始 ident-like token
+
+### 新增內部函式
+
+- `static css_token *consume_ident_like_token(css_tokenizer *t)` — 消耗 ident-like token（ident、function、url）
+
+### 分發邏輯更新
+
+```
+css_tokenizer_next() 分發:
+  - '#' 後接 ident 字元/跳脫 → hash token
+  - '+' 且 starts_number → numeric token
+  - '-' → number / CDC / ident / delim
+  - '.' 且 starts_number → numeric token
+  - '<' 且 !-- → CDO token
+  - '@' 後接 starts_ident_sequence → at-keyword token
+  - '\' 後接有效跳脫 → ident-like token
+  - ident_start → ident-like token
+```
+
+## Task 7: String 和 URL token
+
+### 背景知識
+
+- **CSS Syntax §4.3.5 consume_string_token**: 消耗字串 token（雙引號或單引號包圍的內容）
+  - 遇到配對的結束引號 → 回傳 string-token
+  - 遇到 EOF → parse error，回傳已收集的 string-token
+  - 遇到未跳脫的換行 → parse error，回傳 bad-string-token（不消耗換行）
+  - `\\` + EOF → 消耗反斜線，繼續
+  - `\\` + `\n` → 跳脫換行（行接續），消耗兩者但不加入字串值
+  - `\\` + 其他 → 有效跳脫，使用 consume_escaped_codepoint 解碼
+
+- **CSS Syntax §4.3.6 consume_url_token**: 消耗不帶引號的 URL token
+  - 由 consume_ident_like_token 呼叫，當 `url(` 後接非引號字元時
+  - `url(` 後的空白已被跳過
+  - `)` → 結束 URL token
+  - 空白 → 跳過空白後，只能接 `)` 或 EOF，否則為 bad-url
+  - `"`, `'`, `(`, non-printable 字元 → bad-url
+  - `\` + 有效跳脫 → 消耗跳脫字元
+  - `\` + 無效跳脫 → bad-url
+  - EOF → parse error，回傳已收集的 url-token
+
+- **CSS Syntax §4.3.14 consume_bad_url_remnants**: 消耗 bad URL 的剩餘部分
+  - 消耗直到遇到 `)` 或 EOF
+  - 若遇到有效跳脫則消耗跳脫序列
+
+- **字串分發**: `"` 和 `'` 在主分發迴圈中觸發 consume_string_token，傳入結束引號字元
+
+### 新增內部函式
+
+- `static void consume_bad_url_remnants(css_tokenizer *t)` — 消耗 bad URL 剩餘字元
+- `static css_token *consume_string_token(css_tokenizer *t, uint32_t ending)` — 消耗字串 token
+- `static css_token *consume_url_token(css_tokenizer *t, size_t tok_line, size_t tok_col)` — 消耗不帶引號的 URL token
+
+### Token 類型
+
+- `CSS_TOKEN_STRING` — 有效的字串（value 為字串內容，不含引號）
+- `CSS_TOKEN_BAD_STRING` — 字串中遇到未跳脫換行
+- `CSS_TOKEN_URL` — 不帶引號的 URL（value 為 URL 內容）
+- `CSS_TOKEN_BAD_URL` — URL 中遇到無效字元
+
+### URL 處理流程
+
+```
+consume_ident_like_token():
+  名稱為 "url" 且後接 '(' →
+    跳過空白 →
+      ├─ 引號 ('"' 或 '\'') → function token (url)，之後 parser 會讀取 string token
+      └─ 非引號 → consume_url_token() → url-token 或 bad-url-token
+```
+
+### --tokens 增強輸出格式
+
+- `<string "hello world">` — 字串 token（顯示 value）
+- `<bad-string>` — 壞字串 token
+- `<url "image.png">` — URL token（顯示 value）
+- `<bad-url>` — 壞 URL token
+
+### 測試
+
+```bash
+./css_parse --tokens tests/tokens_string.css
+# 預期:
+#   "hello world" → <string "hello world">
+#   'single quotes' → <string "single quotes">
+#   url(image.png) → <url "image.png">
+#   url("quoted.png") → <function "url"> + <string "quoted.png"> + <)>
+#   "Helvetica Neue" → <string "Helvetica Neue">
+#   "escaped \"quote\"" → <string "escaped "quote"">
+```

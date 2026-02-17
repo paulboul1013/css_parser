@@ -49,8 +49,25 @@
   - _POSIX_C_SOURCE 200809L 定義（strdup 支援）
   - 測試檔案 (tests/tokens_numeric.css)
   - 編譯零警告驗證通過
-- [ ] Task 6: Ident/Function/Hash/At token
-- [ ] Task 7: String 和 URL token
+- [x] Task 6: Ident/Function/Hash/At token
+  - consume_ident_like_token (ident, function, url 分派)
+  - Hash token (#xxx → id/unrestricted)
+  - At-keyword token (@media, @import 等)
+  - CDC (-->) 和 CDO (<!--) token
+  - 反斜線跳脫開始 ident
+  - --tokens 增強輸出 (ident, function, at-keyword, hash)
+  - 測試檔案 (tests/tokens_ident.css)
+  - 編譯零警告驗證通過
+- [x] Task 7: String 和 URL token
+  - consume_string_token (§4.3.5: 雙引號/單引號字串, 跳脫, bad-string)
+  - consume_url_token (§4.3.6: 不帶引號的 URL, bad-url)
+  - consume_bad_url_remnants (§4.3.14: 消耗 bad URL 剩餘字元)
+  - 主分發新增 '"' 和 '\'' 觸發 string token
+  - consume_ident_like_token 更新: unquoted URL 呼叫 consume_url_token
+  - 移除 (void)is_non_printable 抑制（現已被 consume_url_token 使用）
+  - --tokens 增強輸出 (string, bad-string, url, bad-url)
+  - 測試檔案 (tests/tokens_string.css)
+  - 編譯零警告驗證通過
 - [ ] Task 8: Tokenizer 完整性驗證
 - [ ] Task 9: AST 結構定義
 - [ ] Task 10: Parser 骨架

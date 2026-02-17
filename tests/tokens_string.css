@@ -1,0 +1,8 @@
+.test {
+    content: "hello world";
+    content: 'single quotes';
+    background: url(image.png);
+    background: url("quoted.png");
+    font-family: "Helvetica Neue", Arial;
+    content: "escaped \"quote\"";
+}

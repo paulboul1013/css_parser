@@ -447,6 +447,162 @@ static char *consume_ident_sequence(css_tokenizer *t)
     return strdup(buf);
 }
 
+/* §4.3.14: Consume the remnants of a bad url */
+static void consume_bad_url_remnants(css_tokenizer *t)
+{
+    for (;;) {
+        if (t->current == ')' || t->current == CSS_EOF_CODEPOINT) {
+            if (t->current == ')') consume_codepoint(t);
+            return;
+        }
+        if (valid_escape(t->current, t->peek1)) {
+            consume_codepoint(t); /* consume '\' */
+            consume_escaped_codepoint(t);
+        } else {
+            consume_codepoint(t);
+        }
+    }
+}
+
+/* §4.3.5: Consume a string token */
+static css_token *consume_string_token(css_tokenizer *t, uint32_t ending)
+{
+    size_t tok_line = t->line, tok_col = t->column;
+    consume_codepoint(t); /* consume the opening quote */
+
+    char buf[4096];
+    size_t len = 0;
+
+    for (;;) {
+        if (t->current == CSS_EOF_CODEPOINT) {
+            css_parse_error(t, "unterminated string");
+            break; /* return what we have as string-token */
+        }
+        if (t->current == ending) {
+            consume_codepoint(t); /* consume closing quote */
+            break;
+        }
+        if (t->current == '\n') {
+            /* Newline in string → parse error + bad-string-token */
+            css_parse_error(t, "newline in string");
+            /* Don't consume the newline */
+            css_token *tok = css_token_create(CSS_TOKEN_BAD_STRING);
+            buf[len] = '\0';
+            tok->value = strdup(buf);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        if (t->current == '\\') {
+            if (t->peek1 == CSS_EOF_CODEPOINT) {
+                consume_codepoint(t); /* consume backslash, EOF next */
+                continue;
+            }
+            if (t->peek1 == '\n') {
+                /* Escaped newline → continuation, consume both */
+                consume_codepoint(t); /* consume '\' */
+                consume_codepoint(t); /* consume '\n' */
+                continue;
+            }
+            /* Valid escape */
+            consume_codepoint(t); /* consume '\' */
+            uint32_t cp = consume_escaped_codepoint(t);
+            if (len < sizeof(buf) - 4) {
+                len += encode_utf8(cp, buf + len, sizeof(buf) - len);
+            }
+            continue;
+        }
+        /* Normal character */
+        if (len < sizeof(buf) - 4) {
+            len += encode_utf8(t->current, buf + len, sizeof(buf) - len);
+        }
+        consume_codepoint(t);
+    }
+
+    buf[len] = '\0';
+    css_token *tok = css_token_create(CSS_TOKEN_STRING);
+    tok->value = strdup(buf);
+    tok->line = tok_line;
+    tok->column = tok_col;
+    return tok;
+}
+
+/* §4.3.6: Consume a url token */
+static css_token *consume_url_token(css_tokenizer *t, size_t tok_line, size_t tok_col)
+{
+    /* Whitespace after url( has already been consumed by consume_ident_like_token */
+    char buf[4096];
+    size_t len = 0;
+
+    for (;;) {
+        if (t->current == CSS_EOF_CODEPOINT) {
+            css_parse_error(t, "unterminated URL");
+            break;
+        }
+        if (t->current == ')') {
+            consume_codepoint(t);
+            break;
+        }
+        if (is_whitespace(t->current)) {
+            /* Skip whitespace, then expect ')' */
+            while (is_whitespace(t->current)) consume_codepoint(t);
+            if (t->current == ')') {
+                consume_codepoint(t);
+                break;
+            }
+            if (t->current == CSS_EOF_CODEPOINT) {
+                css_parse_error(t, "unterminated URL");
+                break;
+            }
+            /* Bad URL */
+            css_parse_error(t, "unexpected character in URL");
+            consume_bad_url_remnants(t);
+            css_token *tok = css_token_create(CSS_TOKEN_BAD_URL);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        /* Bad characters in URL: ", ', (, non-printable */
+        if (t->current == '"' || t->current == '\'' || t->current == '(' || is_non_printable(t->current)) {
+            css_parse_error(t, "bad character in URL");
+            consume_bad_url_remnants(t);
+            css_token *tok = css_token_create(CSS_TOKEN_BAD_URL);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        if (t->current == '\\') {
+            if (valid_escape(t->current, t->peek1)) {
+                consume_codepoint(t); /* consume '\' */
+                uint32_t cp = consume_escaped_codepoint(t);
+                if (len < sizeof(buf) - 4) {
+                    len += encode_utf8(cp, buf + len, sizeof(buf) - len);
+                }
+                continue;
+            }
+            /* Invalid escape in URL */
+            css_parse_error(t, "invalid escape in URL");
+            consume_bad_url_remnants(t);
+            css_token *tok = css_token_create(CSS_TOKEN_BAD_URL);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        /* Normal character */
+        if (len < sizeof(buf) - 4) {
+            len += encode_utf8(t->current, buf + len, sizeof(buf) - len);
+        }
+        consume_codepoint(t);
+    }
+
+    buf[len] = '\0';
+    css_token *tok = css_token_create(CSS_TOKEN_URL);
+    tok->value = strdup(buf);
+    tok->line = tok_line;
+    tok->column = tok_col;
+    return tok;
+}
+
 /* §4.3.4: Consume an ident-like token */
 static css_token *consume_ident_like_token(css_tokenizer *t)
 {
@@ -468,13 +624,9 @@ static css_token *consume_ident_like_token(css_tokenizer *t)
             tok->column = tok_col;
             return tok;
         }
-        /* Unquoted URL → consume_url_token (implemented in Task 7) */
-        /* For now, return as function token — Task 7 will add proper url-token */
-        css_token *tok = css_token_create(CSS_TOKEN_FUNCTION);
-        tok->value = name;
-        tok->line = tok_line;
-        tok->column = tok_col;
-        return tok;
+        /* Unquoted URL */
+        free(name);
+        return consume_url_token(t, tok_line, tok_col);
     }
 
     /* name followed by '(' → function token */
@@ -574,8 +726,6 @@ css_tokenizer *css_tokenizer_create(const char *input, size_t length)
 
 css_token *css_tokenizer_next(css_tokenizer *t)
 {
-    (void)is_non_printable; /* used in Task 7 for URL token */
-
     /* Consume comments first (CSS Syntax §4.3.2) */
     consume_comments(t);
 
@@ -607,6 +757,16 @@ css_token *css_tokenizer_next(css_tokenizer *t)
     if (c == ':') { consume_codepoint(t); return make_token(CSS_TOKEN_COLON,        tok_line, tok_col); }
     if (c == ';') { consume_codepoint(t); return make_token(CSS_TOKEN_SEMICOLON,    tok_line, tok_col); }
     if (c == ',') { consume_codepoint(t); return make_token(CSS_TOKEN_COMMA,        tok_line, tok_col); }
+
+    /* '"' → string token */
+    if (c == '"') {
+        return consume_string_token(t, '"');
+    }
+
+    /* '\'' → string token */
+    if (c == '\'') {
+        return consume_string_token(t, '\'');
+    }
 
     /* Digit -> numeric token */
     if (is_digit(c)) {

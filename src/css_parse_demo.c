@@ -83,6 +83,14 @@ int main(int argc, char *argv[])
                     printf("<dimension %d \"%s\">\n", (int)tok->numeric_value, tok->unit ? tok->unit : "");
                 else
                     printf("<dimension %g \"%s\">\n", tok->numeric_value, tok->unit ? tok->unit : "");
+            } else if (tok->type == CSS_TOKEN_STRING) {
+                printf("<string \"%s\">\n", tok->value ? tok->value : "");
+            } else if (tok->type == CSS_TOKEN_BAD_STRING) {
+                printf("<bad-string>\n");
+            } else if (tok->type == CSS_TOKEN_URL) {
+                printf("<url \"%s\">\n", tok->value ? tok->value : "");
+            } else if (tok->type == CSS_TOKEN_BAD_URL) {
+                printf("<bad-url>\n");
             } else if (tok->type == CSS_TOKEN_DELIM) {
                 printf("<delim '%c'>\n", (char)tok->delim_codepoint);
             } else {
