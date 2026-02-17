@@ -1,0 +1,53 @@
+/* Comprehensive tokenizer test — covers all 24 token types */
+
+/* 1. ident-token */
+body {}
+div {}
+--custom {}
+
+/* 2. function-token */
+.a { color: rgb(255, 0, 0); }
+.b { transform: rotate(45deg); }
+
+/* 3. at-keyword-token */
+@media screen {}
+@import "file.css";
+@keyframes fade {}
+
+/* 4. hash-token */
+#id-selector {}
+#fff { color: red; }
+
+/* 5. string-token */
+.s { content: "double"; }
+.s { content: 'single'; }
+
+/* 6. url-token */
+.u { background: url(image.png); }
+
+/* 7. number-token */
+.n { z-index: 42; opacity: 0.5; flex: 3e2; }
+
+/* 8. percentage-token */
+.p { width: 50%; }
+
+/* 9. dimension-token */
+.d { width: 100px; font-size: 1.5em; transition: 300ms; }
+
+/* 10. whitespace-token — implicit between tokens */
+
+/* 11. CDO / CDC */
+<!-- -->
+
+/* 12. colon / semicolon / comma */
+.x { color: red; font-family: Arial, sans-serif; }
+
+/* 13. brackets */
+[attr] { }
+.f { calc(1 + 2); }
+
+/* 14. delim */
+* { margin: 0; }
+.c > .d { }
+.e + .f { }
+.g ~ .h { }

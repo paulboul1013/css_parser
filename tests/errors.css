@@ -1,0 +1,16 @@
+/* Error recovery tests */
+
+/* 1. Unterminated comment
+   this should trigger a parse error */
+
+/* 2. Unterminated string */
+.a { content: "unterminated string; }
+
+/* 3. Normal rule after error — should parse fine */
+p { color: blue; }
+
+/* 4. Bad URL with space */
+.b { background: url(bad url); }
+
+/* 5. Another normal rule */
+h1 { font-size: 24px; }

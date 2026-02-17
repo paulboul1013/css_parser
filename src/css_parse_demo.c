@@ -58,6 +58,9 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Token allocation failed\n");
                 break;
             }
+            /* Print [line:col] prefix */
+            printf("[%zu:%zu] ", tok->line, tok->column);
+
             /* Enhanced display for various token types */
             if (tok->type == CSS_TOKEN_IDENT) {
                 printf("<ident \"%s\">\n", tok->value ? tok->value : "");
@@ -92,7 +95,10 @@ int main(int argc, char *argv[])
             } else if (tok->type == CSS_TOKEN_BAD_URL) {
                 printf("<bad-url>\n");
             } else if (tok->type == CSS_TOKEN_DELIM) {
-                printf("<delim '%c'>\n", (char)tok->delim_codepoint);
+                if (tok->delim_codepoint < 0x80)
+                    printf("<delim '%c'>\n", (char)tok->delim_codepoint);
+                else
+                    printf("<delim U+%04X>\n", tok->delim_codepoint);
             } else {
                 printf("<%s>\n", css_token_type_name(tok->type));
             }
