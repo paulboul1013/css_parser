@@ -488,3 +488,136 @@ cc -std=c11 -Wall -Wextra -pedantic -O2 -g -Iinclude src/css_token.c src/css_ast
 ./tests/test_ast
 # 測試: create/free/append/dump/NULL 安全性
 ```
+
+## Task 10-12: CSS Parser (P1) — consume-based 演算法
+
+### 背景知識
+
+- **CSS Syntax Module Level 3 §5**: 定義了 CSS 解析的核心演算法
+- **consume-based 演算法**: Parser 從 tokenizer 逐一消耗 token，根據 token 類型分派到不同的消耗函式
+- **兩階段解析**: 先建立原始 AST（規則 + 區塊 + 元件值），再從區塊內容解析宣告
+
+### 內部結構
+
+```c
+typedef struct {
+    css_tokenizer *tokenizer;
+    css_token *current_token;  /* 目前消耗的 token（擁有權） */
+    bool reconsume;            /* 重新消耗旗標 */
+} css_parser_ctx;
+```
+
+### Token 消耗機制
+
+- `next_token(p)`: 取得下一個 token。若 reconsume 旗標為 true，回傳目前 token
+- `reconsume(p)`: 設定 reconsume 旗標，下次 next_token 不消耗新 token
+- `clone_token(src)`: 深拷貝 token（strdup value/unit）
+
+### 核心消耗函式 (CSS Syntax §5.4)
+
+1. **consume_list_of_rules (§5.4.1)**: 頂層迴圈
+   - 跳過空白
+   - EOF → 結束
+   - CDO/CDC → top_level 時跳過，否則當作 qualified rule
+   - at-keyword → consume_at_rule
+   - 其他 → consume_qualified_rule
+
+2. **consume_at_rule (§5.4.2)**: @規則
+   - 名稱來自 at-keyword token
+   - 消耗 prelude 直到 `;`、`{`、或 EOF
+   - 遇到 `{` → consume_simple_block 作為 block
+
+3. **consume_qualified_rule (§5.4.3)**: 合格規則
+   - 消耗 prelude 直到 `{` 或 EOF
+   - 遇到 `{` → consume_simple_block 作為 block
+   - EOF → parse error，丟棄規則（回傳 NULL）
+
+4. **consume_component_value (§5.4.7)**: 元件值
+   - `{`/`[`/`(` → consume_simple_block → 包裝為 block CV
+   - function token → consume_function → 包裝為 function CV
+   - 其他 → clone_token → 包裝為 token CV
+
+5. **consume_simple_block (§5.4.8)**: 簡單區塊
+   - 記錄開啟括號類型，找到對應關閉括號
+   - 消耗子元件值直到配對的關閉括號或 EOF
+
+6. **consume_function (§5.4.9)**: 函式
+   - 名稱來自 function token 的 value
+   - 消耗參數值直到 `)` 或 EOF
+
+### 宣告解析（後處理）
+
+- `parse_declarations_from_block()`: 從 `{}` 區塊的元件值中偵測宣告模式
+  - 模式: `<ident> <whitespace>* <colon> <whitespace>* <values> <semicolon>`
+  - 跳過前導空白和分號
+  - 錯誤恢復: 遇到非預期 token 時跳到下一個分號
+
+- `check_important()`: 檢查 `!important`
+  - 從值列表末尾反向掃描，跳過空白
+  - 尋找 `<ident "important">` + `<delim '!'>`（不分大小寫）
+  - 找到時設定 `decl->important = true` 並移除相關 token
+
+### 元件值深拷貝
+
+- `clone_cv()`: 深拷貝元件值（遞迴處理 block 和 function）
+- `clone_simple_block()`: 深拷貝區塊及其子值
+- `clone_function()`: 深拷貝函式及其參數
+
+### 公開 API
+
+```c
+css_stylesheet *css_parse_stylesheet(const char *input, size_t length);
+void css_parse_dump(css_stylesheet *sheet, FILE *out);
+```
+
+- `css_parse_stylesheet`: 建立 tokenizer → 消耗規則列表 → 清理 → 回傳 stylesheet
+- `css_parse_dump`: 增強版傾印，自動偵測 `{}` 區塊中的宣告並格式化輸出
+
+### CLI 模式
+
+```bash
+./css_parse tests/basic.css              # 預設模式：解析並傾印 AST（含宣告偵測）
+./css_parse --tokens tests/basic.css     # Token 模式：傾印 token 流
+```
+
+### 傾印輸出格式
+
+```
+STYLESHEET
+  QUALIFIED_RULE
+    prelude:
+      <ident "body">
+      <whitespace>
+    BLOCK {}
+      DECLARATION "color"
+        <ident "red">
+      DECLARATION "font-size"
+        <dimension 16 "px">
+  AT_RULE "media"
+    prelude:
+      <whitespace>
+      <ident "screen">
+      <whitespace>
+    BLOCK {}
+      ...
+  AT_RULE "import"
+    prelude:
+      <whitespace>
+      FUNCTION "url"
+        <string "reset.css">
+```
+
+### 記憶體管理
+
+- parser 內部擁有 `current_token`，在 `next_token` 中釋放上一個
+- `clone_token` 產生的拷貝由 component_value 擁有
+- `parse_declarations_from_block` 中的宣告使用 clone_cv 建立，由呼叫者負責釋放
+- `css_parse_stylesheet` 清理 parser 狀態（current_token + tokenizer）
+
+### 測試
+
+```bash
+./css_parse tests/basic.css           # body { color: red; font-size: 16px; }
+./css_parse tests/tokens_ident.css    # @media, @import, @charset 等
+./css_parse tests/parser_basic.css    # 完整測試：多選擇器、!important、函式值、空規則
+```

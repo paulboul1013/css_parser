@@ -1,7 +1,9 @@
 #ifndef CSS_PARSER_H
 #define CSS_PARSER_H
 
-/* Placeholder — parser API will be defined later */
-typedef int css_parser_placeholder_;
+#include "css_ast.h"
+
+/* Parse a CSS stylesheet from input string */
+css_stylesheet *css_parse_stylesheet(const char *input, size_t length);
 
 #endif /* CSS_PARSER_H */

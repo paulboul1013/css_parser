@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "css_tokenizer.h"
+#include "css_parser.h"
+
+/* Declared in css_parser.c — enhanced dump with declaration detection */
+extern void css_parse_dump(css_stylesheet *sheet, FILE *out);
 
 int main(int argc, char *argv[])
 {
@@ -109,9 +113,15 @@ int main(int argc, char *argv[])
 
         css_tokenizer_free(tokenizer);
     } else {
-        /* Default mode: will do full parse later */
-        printf("Read %zu bytes from %s\n", nread, filename);
-        printf("TODO: tokenize and parse\n");
+        /* Default mode: parse and dump AST */
+        css_stylesheet *sheet = css_parse_stylesheet(buf, nread);
+        if (!sheet) {
+            fprintf(stderr, "Failed to parse stylesheet\n");
+            free(buf);
+            return 1;
+        }
+        css_parse_dump(sheet, stdout);
+        css_stylesheet_free(sheet);
     }
 
     free(buf);

@@ -78,8 +78,32 @@
   - 傾印函式（css_ast_dump，縮排式 AST 輸出）
   - 單元測試（tests/test_ast.c，12 個測試案例）
   - 編譯零警告驗證通過
-- [ ] Task 10: Parser 骨架
-- [ ] Task 11: At-rule 和 Qualified rule
-- [ ] Task 12: Declaration 與 !important
+- [x] Task 10: Parser 骨架
+  - css_parser_ctx 內部結構（tokenizer, current_token, reconsume）
+  - next_token / reconsume token 消耗機制
+  - clone_token token 深拷貝輔助函式
+  - consume_component_value (§5.4.7)
+  - consume_simple_block (§5.4.8)
+  - consume_function (§5.4.9)
+  - consume_list_of_rules (§5.4.1)
+  - css_parse_stylesheet 公開 API
+  - css_parser.h 標頭檔
+  - 編譯零警告驗證通過
+- [x] Task 11: At-rule 和 Qualified rule
+  - consume_at_rule (§5.4.2: prelude + block/semicolon)
+  - consume_qualified_rule (§5.4.3: prelude + block, EOF 丟棄)
+  - CDO/CDC 處理（top_level 跳過）
+  - css_parse_dump 增強傾印函式
+  - 測試: @media, @import, @charset, qualified rules
+  - 編譯零警告驗證通過
+- [x] Task 12: Declaration 與 !important
+  - parse_declarations_from_block 後處理宣告解析
+  - check_important !important 偵測（不分大小寫）
+  - clone_cv / clone_simple_block / clone_function 深拷貝
+  - cv_is_token 輔助函式
+  - 錯誤恢復（跳到下一個分號）
+  - css_parse_demo.c 整合（預設模式使用 parser）
+  - 測試檔案 (tests/parser_basic.css)
+  - 編譯零警告驗證通過
 - [ ] Task 13: 端到端整合測試
 - [ ] Task 14: 記憶體驗證與文件更新
