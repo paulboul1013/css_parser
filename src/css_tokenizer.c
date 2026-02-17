@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <strings.h>
 
 /* ---------- Code point classification helpers ---------- */
 
@@ -44,12 +45,6 @@ static bool is_ident_char(uint32_t c)
 static bool is_non_printable(uint32_t c)
 {
     return (c <= 0x08) || c == 0x0B || (c >= 0x0E && c <= 0x1F) || c == 0x7F;
-}
-
-/* Suppress unused warnings for helpers used in future tasks */
-static inline void unused_helpers_(void)
-{
-    (void)is_non_printable;
 }
 
 /* ---------- UTF-8 decode ---------- */
@@ -452,6 +447,54 @@ static char *consume_ident_sequence(css_tokenizer *t)
     return strdup(buf);
 }
 
+/* §4.3.4: Consume an ident-like token */
+static css_token *consume_ident_like_token(css_tokenizer *t)
+{
+    size_t tok_line = t->line, tok_col = t->column;
+    char *name = consume_ident_sequence(t);
+
+    /* Check for url( — case-insensitive */
+    if (strcasecmp(name, "url") == 0 && t->current == '(') {
+        consume_codepoint(t); /* consume '(' */
+        /* Skip whitespace to see if quoted or unquoted URL */
+        while (is_whitespace(t->current)) {
+            consume_codepoint(t);
+        }
+        if (t->current == '\'' || t->current == '"') {
+            /* url("...") or url('...') → function token */
+            css_token *tok = css_token_create(CSS_TOKEN_FUNCTION);
+            tok->value = name;
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        /* Unquoted URL → consume_url_token (implemented in Task 7) */
+        /* For now, return as function token — Task 7 will add proper url-token */
+        css_token *tok = css_token_create(CSS_TOKEN_FUNCTION);
+        tok->value = name;
+        tok->line = tok_line;
+        tok->column = tok_col;
+        return tok;
+    }
+
+    /* name followed by '(' → function token */
+    if (t->current == '(') {
+        consume_codepoint(t); /* consume '(' */
+        css_token *tok = css_token_create(CSS_TOKEN_FUNCTION);
+        tok->value = name;
+        tok->line = tok_line;
+        tok->column = tok_col;
+        return tok;
+    }
+
+    /* Otherwise → ident token */
+    css_token *tok = css_token_create(CSS_TOKEN_IDENT);
+    tok->value = name;
+    tok->line = tok_line;
+    tok->column = tok_col;
+    return tok;
+}
+
 /* §4.3.3: Consume a numeric token */
 static css_token *consume_numeric_token(css_tokenizer *t)
 {
@@ -531,8 +574,7 @@ css_tokenizer *css_tokenizer_create(const char *input, size_t length)
 
 css_token *css_tokenizer_next(css_tokenizer *t)
 {
-    /* Suppress unused helpers (used in future tasks) */
-    (void)unused_helpers_;
+    (void)is_non_printable; /* used in Task 7 for URL token */
 
     /* Consume comments first (CSS Syntax §4.3.2) */
     consume_comments(t);
@@ -571,7 +613,25 @@ css_token *css_tokenizer_next(css_tokenizer *t)
         return consume_numeric_token(t);
     }
 
-    /* '+' -> might start number */
+    /* '#' → hash token (§4.3.1) */
+    if (c == '#') {
+        if (is_ident_char(t->peek1) || valid_escape(t->peek1, t->peek2)) {
+            consume_codepoint(t); /* consume '#' */
+            css_token *tok = css_token_create(CSS_TOKEN_HASH);
+            if (starts_ident_sequence(t->current, t->peek1, t->peek2)) {
+                tok->hash_type = CSS_HASH_ID;
+            } else {
+                tok->hash_type = CSS_HASH_UNRESTRICTED;
+            }
+            tok->value = consume_ident_sequence(t);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        /* else fall through to delim */
+    }
+
+    /* '+' → might start number */
     if (c == '+') {
         if (starts_number(c, t->peek1, t->peek2)) {
             return consume_numeric_token(t);
@@ -579,15 +639,26 @@ css_token *css_tokenizer_next(css_tokenizer *t)
         /* else fall through to delim */
     }
 
-    /* '-' -> might start number (ident handling comes in Task 6) */
+    /* '-' → number / CDC / ident / delim */
     if (c == '-') {
         if (starts_number(c, t->peek1, t->peek2)) {
             return consume_numeric_token(t);
         }
-        /* else fall through to delim (ident/CDC handling in Task 6) */
+        /* CDC: --> */
+        if (t->peek1 == '-' && t->peek2 == '>') {
+            consume_codepoint(t); /* '-' */
+            consume_codepoint(t); /* '-' */
+            consume_codepoint(t); /* '>' */
+            return make_token(CSS_TOKEN_CDC, tok_line, tok_col);
+        }
+        /* ident starting with '-' */
+        if (starts_ident_sequence(c, t->peek1, t->peek2)) {
+            return consume_ident_like_token(t);
+        }
+        /* else fall through to delim */
     }
 
-    /* '.' -> might start number */
+    /* '.' → might start number */
     if (c == '.') {
         if (starts_number(c, t->peek1, t->peek2)) {
             return consume_numeric_token(t);
@@ -595,7 +666,46 @@ css_token *css_tokenizer_next(css_tokenizer *t)
         /* else fall through to delim */
     }
 
-    /* Everything else: delim token (ident, string, etc. handled in future tasks) */
+    /* '<' → CDO (<!--) */
+    if (c == '<') {
+        if (t->peek1 == '!' && t->peek2 == '-' && t->peek3 == '-') {
+            consume_codepoint(t); /* '<' */
+            consume_codepoint(t); /* '!' */
+            consume_codepoint(t); /* '-' */
+            consume_codepoint(t); /* '-' */
+            return make_token(CSS_TOKEN_CDO, tok_line, tok_col);
+        }
+        /* else fall through to delim */
+    }
+
+    /* '@' → at-keyword token */
+    if (c == '@') {
+        if (starts_ident_sequence(t->peek1, t->peek2, t->peek3)) {
+            consume_codepoint(t); /* consume '@' */
+            css_token *tok = css_token_create(CSS_TOKEN_AT_KEYWORD);
+            tok->value = consume_ident_sequence(t);
+            tok->line = tok_line;
+            tok->column = tok_col;
+            return tok;
+        }
+        /* else fall through to delim */
+    }
+
+    /* '\' (backslash) → valid escape → ident-like token */
+    if (c == '\\') {
+        if (valid_escape(c, t->peek1)) {
+            return consume_ident_like_token(t);
+        }
+        css_parse_error(t, "invalid escape");
+        /* fall through to delim */
+    }
+
+    /* ident-start → ident-like token */
+    if (is_ident_start(c)) {
+        return consume_ident_like_token(t);
+    }
+
+    /* Everything else: delim token */
     consume_codepoint(t);
     css_token *tok = css_token_create(CSS_TOKEN_DELIM);
     if (tok) {

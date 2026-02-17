@@ -58,8 +58,17 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Token allocation failed\n");
                 break;
             }
-            /* Enhanced display for numeric tokens */
-            if (tok->type == CSS_TOKEN_NUMBER) {
+            /* Enhanced display for various token types */
+            if (tok->type == CSS_TOKEN_IDENT) {
+                printf("<ident \"%s\">\n", tok->value ? tok->value : "");
+            } else if (tok->type == CSS_TOKEN_FUNCTION) {
+                printf("<function \"%s\">\n", tok->value ? tok->value : "");
+            } else if (tok->type == CSS_TOKEN_AT_KEYWORD) {
+                printf("<at-keyword \"%s\">\n", tok->value ? tok->value : "");
+            } else if (tok->type == CSS_TOKEN_HASH) {
+                printf("<hash \"%s\"%s>\n", tok->value ? tok->value : "",
+                       tok->hash_type == CSS_HASH_ID ? " id" : "");
+            } else if (tok->type == CSS_TOKEN_NUMBER) {
                 if (tok->number_type == CSS_NUM_INTEGER)
                     printf("<number %d>\n", (int)tok->numeric_value);
                 else

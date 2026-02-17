@@ -1,0 +1,12 @@
+@media screen {
+    .container {
+        color: red;
+        background-color: #fff;
+        --custom-var: blue;
+    }
+    #main {
+        display: flex;
+    }
+}
+@import url("style.css");
+@charset "UTF-8";
