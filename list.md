@@ -163,7 +163,13 @@
   - 編譯零警告驗證通過
   - make test-all 全部通過
 
+- [x] P2b Task 8: Selector 測試檔案 + ASAN 驗證
+  - tests/selectors.css 全面測試（type/universal/class/id/compound/combinator/attribute/pseudo/complex/list）
+  - Makefile 新增 test-selectors 目標，更新 test-all
+  - make clean && make css_parse 零警告
+  - make test-all 全部通過
+  - AddressSanitizer 驗證：零記憶體錯誤（所有測試檔案）
+
 ### 未完成
 
-- [ ] P2b Task 8: Selector 測試檔案 + ASAN 驗證
 - [ ] P2c: Selector 進階功能（:not(), :is(), :has(), :nth-child() 等）

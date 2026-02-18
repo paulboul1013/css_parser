@@ -945,9 +945,9 @@ parse_attribute_selector(block)
   └─ 讀取 case flag (i/s)
 ```
 
-## P2b Task 7: Selector 解析整合到 AST 和 Parser
+## P2b Task 7-8: Selector 解析整合、測試與 ASAN 驗證
 
-### 背景知識
+### Task 7 背景知識
 
 - **整合目的**: 將已實作的 selector 解析功能（Tasks 1-6）整合到主解析管線中
 - **Forward Declaration**: `css_ast.h` 不能 include `css_selector.h`（因為 `css_selector.h` 已經 include `css_ast.h`，會造成循環依賴），所以使用 `struct css_selector_list;` forward declaration
@@ -1010,3 +1010,55 @@ STYLESHEET
       DECLARATION "color"
         <ident "red">
 ```
+
+### Task 8: Selector 測試與 ASAN 驗證
+
+#### 背景知識
+
+- **全面測試檔案**: `tests/selectors.css` 涵蓋所有 P2a 支援的選擇器類型
+- **AddressSanitizer**: 使用 `-fsanitize=address,undefined` 編譯，可偵測記憶體洩漏、buffer overflow、use-after-free、undefined behavior
+- **Makefile test-selectors**: 獨立的 selector 測試目標
+
+#### 測試涵蓋範圍
+
+| 類別 | 測試用例 |
+|------|---------|
+| 基本 type selector | `body`, `div` |
+| Universal selector | `*` |
+| Class selector | `.container`, `.btn.primary`（複合 class） |
+| ID selector | `#header` |
+| Compound selector | `div.container#main` |
+| Descendant combinator | `div p`（空格） |
+| Child combinator | `ul > li` |
+| Next-sibling combinator | `h1 + p` |
+| Subsequent-sibling combinator | `h1 ~ p` |
+| Attribute selector (7 種) | `[href]`, `[type="text"]`, `[class~="active"]`, `[lang\|="en"]`, `[href^="https"]`, `[href$=".pdf"]`, `[data-value*="test"]` |
+| Attribute case flag | `[type="text" i]` |
+| Pseudo-class | `:hover`, `:first-child`, `:focus` |
+| Pseudo-element | `::before`, `::after` |
+| Complex chain | `.nav > ul > li > a:hover` |
+| Selector list | `h1, h2, h3` / `.btn, .link, a:hover` |
+
+#### Makefile 測試目標
+
+```makefile
+test-selectors: css_parse
+	./css_parse tests/selectors.css
+
+test-all: test test-tokens test-errors test-selectors
+```
+
+#### ASAN 編譯與驗證
+
+```bash
+cc -std=c11 -Wall -Wextra -pedantic -g -fsanitize=address,undefined \
+   -Iinclude src/css_token.c src/css_tokenizer.c src/css_ast.c \
+   src/css_parser.c src/css_selector.c src/css_parse_demo.c -o css_parse_asan
+
+./css_parse_asan tests/selectors.css    # 零記憶體錯誤
+./css_parse_asan tests/basic.css        # 零記憶體錯誤
+./css_parse_asan tests/declarations.css # 零記憶體錯誤
+./css_parse_asan tests/at_rules.css     # 零記憶體錯誤
+```
+
+- **結果**: 全部 PASS，零記憶體洩漏、零 buffer overflow、零 use-after-free、零 undefined behavior

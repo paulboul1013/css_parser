@@ -22,4 +22,7 @@ test-tokens: css_parse
 test-errors: css_parse
 	CSSPARSER_PARSE_ERRORS=1 ./css_parse tests/errors.css
 
-test-all: test test-tokens test-errors
+test-selectors: css_parse
+	./css_parse tests/selectors.css
+
+test-all: test test-tokens test-errors test-selectors

@@ -1,0 +1,54 @@
+/* Basic type selectors */
+body { margin: 0; }
+div { display: block; }
+
+/* Universal selector */
+* { box-sizing: border-box; }
+
+/* Class selectors */
+.container { width: 100%; }
+.btn.primary { color: white; }
+
+/* ID selectors */
+#header { height: 60px; }
+
+/* Compound selectors */
+div.container#main { padding: 10px; }
+
+/* Descendant combinator */
+div p { color: black; }
+
+/* Child combinator */
+ul > li { list-style: none; }
+
+/* Next-sibling combinator */
+h1 + p { margin-top: 0; }
+
+/* Subsequent-sibling combinator */
+h1 ~ p { color: gray; }
+
+/* Attribute selectors */
+[href] { color: blue; }
+[type="text"] { border: 1px solid; }
+[class~="active"] { font-weight: bold; }
+[lang|="en"] { color: green; }
+[href^="https"] { text-decoration: none; }
+[href$=".pdf"] { color: red; }
+[data-value*="test"] { background: yellow; }
+[type="text" i] { outline: none; }
+
+/* Pseudo-classes */
+a:hover { color: red; }
+li:first-child { font-weight: bold; }
+input:focus { border-color: blue; }
+
+/* Pseudo-elements */
+p::before { content: ""; }
+p::after { content: ""; }
+
+/* Complex selectors */
+.nav > ul > li > a:hover { color: red; }
+
+/* Selector list (comma-separated) */
+h1, h2, h3 { font-weight: bold; }
+.btn, .link, a:hover { cursor: pointer; }
