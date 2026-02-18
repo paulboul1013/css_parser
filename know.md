@@ -838,4 +838,109 @@ SELECTOR_LIST (2)
 ### 檔案
 
 - `include/css_selector.h` — 所有 enum/struct/API 宣告
-- `src/css_selector.c` — 生命週期 + dump + stub
+- `src/css_selector.c` — 生命週期 + dump + 解析 + specificity
+
+## P2a Tasks 4-6: Selector 解析邏輯與 Specificity
+
+### 背景知識
+
+- **CSS Selectors Level 4 解析**: 從 component_value 陣列（即 qualified_rule 的 prelude）解析選擇器
+- **Component Value (CV)**: 解析器產生的中間表示，可能是 preserved token、simple block 或 function
+  - preserved token: 普通的 CSS token（ident、hash、delim、colon 等）
+  - simple block: 括號包圍的子值列表（`[...]`、`(...)`、`{...}`）
+  - function: 函式名稱 + 參數值列表
+
+### CV 輔助函式
+
+```c
+/* 檢查 CV 是否為特定類型的 preserved token */
+static bool cv_is(css_component_value *cv, css_token_type type)
+
+/* 檢查 CV 是否為特定 codepoint 的 delim token */
+static bool cv_is_delim(css_component_value *cv, uint32_t cp)
+
+/* 取得 CV 中 token 的 value 字串（非 token CV 回傳 NULL） */
+static const char *cv_token_value(css_component_value *cv)
+```
+
+### Attribute Selector 解析
+
+- **輸入**: `css_simple_block *block`（`[...]` 括號區塊）
+- **格式**: `[attr]`, `[attr=val]`, `[attr~=val]`, `[attr|=val]`, `[attr^=val]`, `[attr$=val]`, `[attr*=val]`
+- **匹配運算子對應**:
+  - `=` → 單一 delim('=') token → `ATTR_EXACT`
+  - `~=` → delim('~') + delim('=') 兩個 token → `ATTR_INCLUDES`
+  - `|=` → delim('|') + delim('=') → `ATTR_DASH`
+  - `^=` → delim('^') + delim('=') → `ATTR_PREFIX`
+  - `$=` → delim('$') + delim('=') → `ATTR_SUFFIX`
+  - `*=` → delim('*') + delim('=') → `ATTR_SUBSTRING`
+- **attr_value**: ident 或 string token
+- **case flag**: 可選的 `i`（大小寫不敏感）或 `s`（大小寫敏感，預設）
+
+### Compound Selector 解析
+
+- **重要**: compound selector 內的 simple selector 之間**沒有空白分隔**
+- **解析順序**:
+  1. 可選的 type selector: ident → `SEL_TYPE`, delim('*') → `SEL_UNIVERSAL`
+  2. 迴圈 subclass selector:
+     - hash token → `SEL_ID`（name = token->value）
+     - delim('.') + ident → `SEL_CLASS`
+     - `[...]` simple block → `parse_attribute_selector()`
+     - colon + colon + ident → `SEL_PSEUDO_ELEMENT`
+     - colon + ident → `SEL_PSEUDO_CLASS`
+  3. 至少需要 1 個 simple selector
+
+### Complex Selector 解析
+
+- **格式**: compound1 combinator compound2 combinator compound3 ...
+- **Combinator 偵測**:
+  - delim('>') → `COMB_CHILD`
+  - delim('+') → `COMB_NEXT_SIBLING`
+  - delim('~') → `COMB_SUBSEQUENT_SIBLING`
+  - 只有空白（無明確 combinator）→ `COMB_DESCENDANT`
+- **解析流程**: 跳過空白 → 解析 compound → 迴圈（偵測 combinator → 解析下個 compound）
+
+### Selector List 解析
+
+- **分隔符**: comma token
+- **流程**: 以 comma 切分區間 → 對每個區間呼叫 `parse_complex_selector()`
+- **錯誤處理**: 任一 complex selector 解析失敗 → 整個列表無效（回傳 NULL）
+- **空列表**: 回傳 NULL
+
+### Specificity 計算
+
+```
+(a, b, c) 三元組:
+  a: #id 計數
+  b: .class + [attr] + :pseudo-class 計數
+  c: type + ::pseudo-element 計數
+  * (universal) 不計入
+```
+
+- 遍歷所有 compound → 遍歷所有 simple selector → 根據 type 累加
+
+### 流程架構
+
+```
+css_parse_selector_list(values, count)
+  ├─ 以 comma 切分為區間
+  ├─ 對每個區間:
+  │   └─ parse_complex_selector(values, start, end)
+  │       ├─ 跳過前導空白
+  │       ├─ parse_compound_selector() → 第一個 compound
+  │       └─ 迴圈:
+  │           ├─ 偵測空白/combinator
+  │           └─ parse_compound_selector() → 下個 compound
+  └─ 組成 selector_list 回傳
+
+parse_compound_selector(values, count, *pos)
+  ├─ 嘗試 type/universal selector
+  └─ 迴圈 subclass: id/class/attr/pseudo
+
+parse_attribute_selector(block)
+  ├─ 跳過空白
+  ├─ 讀取 attr_name (ident)
+  ├─ 讀取 match operator
+  ├─ 讀取 attr_value (ident/string)
+  └─ 讀取 case flag (i/s)
+```

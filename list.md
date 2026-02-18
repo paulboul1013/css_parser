@@ -139,8 +139,22 @@
   - 編譯零警告驗證通過
   - make test-all 全部通過
 
+- [x] P2a Task 4: Compound selector 解析
+  - CV 輔助函式（cv_is, cv_is_delim, cv_token_value）
+  - parse_attribute_selector（[attr], [attr=val], [attr~=val] 等 7 種匹配）
+  - parse_compound_selector（type/universal + subclass: id/class/attr/pseudo）
+  - 編譯零警告驗證通過
+- [x] P2a Task 5: Complex selector + selector list 解析
+  - parse_complex_selector（compound + combinator 迴圈）
+  - css_parse_selector_list（comma 分隔 → 多個 complex selector）
+  - 錯誤處理：任一失敗 → 整個列表無效
+  - 編譯零警告驗證通過
+- [x] P2a Task 6: Specificity 計算
+  - css_selector_specificity（a=id, b=class/attr/pseudo-class, c=type/pseudo-element）
+  - 編譯零警告驗證通過
+  - AddressSanitizer 驗證：零記憶體錯誤
+  - make test-all 全部通過
+
 ### 未完成
 
-- [ ] P2a Task 4-5: Selector 解析器（css_parse_selector_list 實作）
-- [ ] P2a Task 6: Specificity 計算（css_selector_specificity 實作）
 - [ ] P2b: Selector 進階功能（:not(), :is(), :has(), :nth-child() 等）
