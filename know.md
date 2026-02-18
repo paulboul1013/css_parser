@@ -489,6 +489,55 @@ cc -std=c11 -Wall -Wextra -pedantic -O2 -g -Iinclude src/css_token.c src/css_ast
 # 測試: create/free/append/dump/NULL 安全性
 ```
 
+## Task 8: Tokenizer 完整性驗證
+
+### 背景知識
+
+- **Token 傾印增強**: 加上 `[line:col]` 前綴，方便除錯定位
+- **完整測試檔案**: `tests/tokens.css` 包含所有 24 種 token 類型的測試用例
+- **錯誤測試**: `tests/errors.css` 測試錯誤恢復場景（未結束的註解、bad-string、bad-url）
+
+### 完整的 --tokens 輸出格式
+
+```
+[1:1] <ident "body">
+[1:5] <whitespace>
+[1:6] <{>
+[2:5] <ident "color">
+[2:10] <:>
+[2:12] <ident "red">
+[2:15] <;>
+[3:1] <}>
+[3:2] <EOF>
+```
+
+### 24 種 token 的輸出格式對照
+
+| Token 類型 | 輸出格式 |
+|-----------|---------|
+| ident | `<ident "name">` |
+| function | `<function "name">` |
+| at-keyword | `<at-keyword "name">` |
+| hash (id) | `<hash id "name">` |
+| hash (unrestricted) | `<hash "name">` |
+| string | `<string "value">` |
+| bad-string | `<bad-string>` |
+| url | `<url "value">` |
+| bad-url | `<bad-url>` |
+| number (integer) | `<number 42>` |
+| number (float) | `<number 3.14>` |
+| percentage | `<percentage 50>` |
+| dimension | `<dimension 10 "px">` |
+| whitespace | `<whitespace>` |
+| CDO | `<CDO>` |
+| CDC | `<CDC>` |
+| colon | `<:>` |
+| semicolon | `<;>` |
+| comma | `<,>` |
+| delim | `<delim 'c'>` |
+| 6 種括號 | `<(>`, `<)>`, `<[>`, `<]>`, `<{>`, `<}>` |
+| EOF | `<EOF>` |
+
 ## Task 10-12: CSS Parser (P1) — consume-based 演算法
 
 ### 背景知識
@@ -621,3 +670,57 @@ STYLESHEET
 ./css_parse tests/tokens_ident.css    # @media, @import, @charset 等
 ./css_parse tests/parser_basic.css    # 完整測試：多選擇器、!important、函式值、空規則
 ```
+
+## Task 13: 端到端整合測試
+
+### 測試檔案清單
+
+| 檔案 | 用途 | 測試目標 |
+|------|------|---------|
+| tests/basic.css | 基本規則 | body { color: red; font-size: 16px; } |
+| tests/declarations.css | 宣告測試 | !important, calc(), rgb(), linear-gradient(), 多值 |
+| tests/at_rules.css | @規則測試 | @charset, @import, @media, @font-face, @keyframes |
+| tests/tokens.css | 完整 token 測試 | 所有 24 種 token 類型 |
+| tests/errors.css | 錯誤恢復 | 未結束註解, bad-string, bad-url, 正常解析恢復 |
+| tests/tokens_basic.css | 標點測試 | 括號、冒號、分號、逗號、註解 |
+| tests/tokens_numeric.css | 數值測試 | 整數、浮點、百分比、dimension、科學記號 |
+| tests/tokens_ident.css | Ident 測試 | @media, 選擇器, hash, custom properties |
+| tests/tokens_string.css | 字串測試 | 雙引號、單引號、url()、跳脫 |
+| tests/parser_basic.css | Parser 測試 | 完整規則、@規則、函式值、!important |
+| tests/preprocess_test.css | 前處理測試 | CRLF/CR/FF/NULL 轉換 |
+| tests/preprocess_edge.css | 邊界測試 | 前處理邊界情況 |
+
+### Makefile 測試目標
+
+```makefile
+test: css_parse          # 基本測試（basic + declarations + at_rules）
+test-tokens: css_parse   # Token 傾印測試
+test-errors: css_parse   # 錯誤恢復測試（CSSPARSER_PARSE_ERRORS=1）
+test-all: test test-tokens test-errors  # 全部測試
+```
+
+## Task 14: 記憶體驗證與文件更新
+
+### AddressSanitizer 使用
+
+```bash
+cc -std=c11 -Wall -Wextra -pedantic -g -fsanitize=address,undefined \
+   -Iinclude src/css_token.c src/css_tokenizer.c src/css_ast.c src/css_parser.c \
+   src/css_parse_demo.c -o css_parse_asan
+
+./css_parse_asan tests/basic.css
+./css_parse_asan tests/declarations.css
+./css_parse_asan tests/at_rules.css
+./css_parse_asan --tokens tests/tokens.css
+CSSPARSER_PARSE_ERRORS=1 ./css_parse_asan tests/errors.css
+```
+
+- **結果**: 零記憶體洩漏、零 buffer overflow、零 use-after-free、零 undefined behavior
+- **所有 free 路徑正確**: stylesheet → rules → at_rule/qualified_rule → prelude/block → component_values → tokens
+
+### 專案完成狀態
+
+- **P0 Tokenizer**: 完成 ✓（24 種 token、UTF-8 解碼、前處理、錯誤恢復）
+- **P1 Parser**: 完成 ✓（AST 產生、宣告解析、!important、consume-based 演算法）
+- **P2 Selectors**: 未開始（CSS Selectors Level 4）
+- **P3 Advanced**: 未開始（Nesting、Media Queries、calc()）

@@ -105,5 +105,20 @@
   - css_parse_demo.c 整合（預設模式使用 parser）
   - 測試檔案 (tests/parser_basic.css)
   - 編譯零警告驗證通過
-- [ ] Task 13: 端到端整合測試
-- [ ] Task 14: 記憶體驗證與文件更新
+- [x] Task 13: 端到端整合測試
+  - 新增測試檔案 (tests/at_rules.css, tests/declarations.css)
+  - Makefile 新增 test/test-tokens/test-errors/test-all 目標
+  - 驗證: basic.css, declarations.css, at_rules.css 解析正確
+  - 驗證: tokens.css token 傾印正確
+  - 驗證: errors.css 錯誤恢復正常（CSSPARSER_PARSE_ERRORS=1）
+  - 編譯零警告驗證通過
+- [x] Task 14: 記憶體驗證與文件更新
+  - AddressSanitizer 驗證: 零記憶體錯誤（所有測試檔案）
+  - UndefinedBehaviorSanitizer 驗證: 零未定義行為
+  - CLAUDE.md 更新: 建構命令、檔案清單、實作狀態
+  - know.md 更新: 完整背景知識
+  - list.md 更新: 完整進度追蹤
+
+## P0 + P1 原型完成
+
+所有 14 個任務已完成。Tokenizer（24 種 token）和 Parser（AST 產生）均通過完整測試和記憶體安全驗證。

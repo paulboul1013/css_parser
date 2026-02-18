@@ -11,7 +11,12 @@ A spec-compliant CSS parser implemented in pure C11, following [W3C CSS Syntax M
 ```sh
 make css_parse                                          # Build the parser
 ./css_parse tests/basic.css                             # Parse a CSS file and dump AST
+./css_parse --tokens tests/basic.css                    # Dump token stream only
 CSSPARSER_PARSE_ERRORS=1 ./css_parse tests/errors.css   # Parse with error reporting enabled
+make test                                               # Run basic parse tests
+make test-tokens                                        # Run token dump tests
+make test-errors                                        # Run error recovery tests
+make test-all                                           # Run all tests
 ```
 
 ## Architecture
@@ -26,15 +31,20 @@ CSS Input → Preprocessing (CR/FF/CRLF→LF, NULL→U+FFFD)
          → Value Parser (CSS Values and Units Level 4, in css_value.c)
 ```
 
-**Key source files:**
-- `include/` — Public headers: `css_token.h`, `css_tokenizer.h`, `css_ast.h`, `css_parser.h`, `css_selector.h`, `css_value.h`
-- `src/css_tokenizer.c` — Core tokenizer state machine (~800-1000 lines)
-- `src/css_parser.c` — Core parser with consume-based algorithms (~600-800 lines)
-- `src/css_selector.c` — Selector parsing including specificity calculation
-- `src/css_value.c` — Value parsing (lengths, colors, calc(), etc.)
-- `src/css_ast.c` — AST node creation/cleanup/dump
-- `src/css_token.c` — Token lifecycle (init/free)
-- `src/css_parse_demo.c` — CLI entry point
+**Implemented source files (P0 + P1):**
+- `include/css_token.h` — Token types (24 types) + css_token struct
+- `include/css_tokenizer.h` — Tokenizer API + css_tokenizer struct
+- `include/css_ast.h` — AST node types (7 types) + all struct definitions
+- `include/css_parser.h` — Parser API (css_parse_stylesheet)
+- `src/css_token.c` — Token lifecycle (create/free/type_name)
+- `src/css_tokenizer.c` — Complete tokenizer state machine (~660 lines)
+- `src/css_ast.c` — AST node create/free/dump (~460 lines)
+- `src/css_parser.c` — Core parser with consume-based algorithms (~740 lines)
+- `src/css_parse_demo.c` — CLI entry point (--tokens mode + default parse mode)
+
+**Planned (not yet implemented):**
+- `src/css_selector.c` — Selector parsing (P2)
+- `src/css_value.c` — Value parsing (P3)
 
 ## Design Principles
 
@@ -43,9 +53,16 @@ CSS Input → Preprocessing (CR/FF/CRLF→LF, NULL→U+FFFD)
 - **Incremental implementation**: P0 (Tokenizer) → P1 (Parser) → P2 (Selectors) → P3 (Advanced features like nesting, media queries, calc())
 - **Language**: C11 standard, no external dependencies
 
+## Current Implementation Status
+
+- **P0 (Tokenizer)**: Complete — all 24 token types, preprocessing, UTF-8, escape sequences, error recovery
+- **P1 (Parser)**: Complete — stylesheet/rules/declarations/blocks/functions, !important detection, AST dump
+- **P2 (Selectors)**: Not started
+- **P3 (Advanced)**: Not started
+
 ## Specifications Implemented
 
-Primary: CSS Syntax Module Level 3. Also: CSS Selectors Level 4, CSS Values and Units Level 4, CSS Cascade Level 5, CSS Conditional Rules Level 3, Media Queries Level 5, CSS Nesting, CSS Color Level 4.
+Primary: CSS Syntax Module Level 3 (§3-§5 complete). Planned: CSS Selectors Level 4, CSS Values and Units Level 4, CSS Cascade Level 5, CSS Conditional Rules Level 3, Media Queries Level 5, CSS Nesting, CSS Color Level 4.
 
 ## Reference
 
@@ -56,5 +73,5 @@ See `CSS_PARSER_PLAN.md` for the full implementation plan including detailed dat
 每進行一步寫代碼操作都要進行背景知識的補充，並且都要更新知識，語法用法，流程架構，到know.md
 每做一步都要進行測資測試，並且測資都要更新測資到tests資料夾
 列出現在未更新和已更新的內容到list.md，並且隨時更新是否完成以及增添新內容
-
+請隨時注意html_parser/的內容，因為你們兩個專案是未來將會一起變成render tree輸出
 
