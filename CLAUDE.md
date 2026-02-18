@@ -16,6 +16,7 @@ CSSPARSER_PARSE_ERRORS=1 ./css_parse tests/errors.css   # Parse with error repor
 make test                                               # Run basic parse tests
 make test-tokens                                        # Run token dump tests
 make test-errors                                        # Run error recovery tests
+make test-selectors                                     # Run selector parsing tests
 make test-all                                           # Run all tests
 ```
 
@@ -31,19 +32,20 @@ CSS Input → Preprocessing (CR/FF/CRLF→LF, NULL→U+FFFD)
          → Value Parser (CSS Values and Units Level 4, in css_value.c)
 ```
 
-**Implemented source files (P0 + P1):**
+**Implemented source files (P0 + P1 + P2a):**
 - `include/css_token.h` — Token types (24 types) + css_token struct
 - `include/css_tokenizer.h` — Tokenizer API + css_tokenizer struct
 - `include/css_ast.h` — AST node types (7 types) + all struct definitions
 - `include/css_parser.h` — Parser API (css_parse_stylesheet)
+- `include/css_selector.h` — Selector types + parsing API
 - `src/css_token.c` — Token lifecycle (create/free/type_name)
 - `src/css_tokenizer.c` — Complete tokenizer state machine (~660 lines)
 - `src/css_ast.c` — AST node create/free/dump (~460 lines)
 - `src/css_parser.c` — Core parser with consume-based algorithms (~740 lines)
+- `src/css_selector.c` — Selector parsing + specificity calculation (~500 lines)
 - `src/css_parse_demo.c` — CLI entry point (--tokens mode + default parse mode)
 
 **Planned (not yet implemented):**
-- `src/css_selector.c` — Selector parsing (P2)
 - `src/css_value.c` — Value parsing (P3)
 
 ## Design Principles
@@ -57,7 +59,7 @@ CSS Input → Preprocessing (CR/FF/CRLF→LF, NULL→U+FFFD)
 
 - **P0 (Tokenizer)**: Complete — all 24 token types, preprocessing, UTF-8, escape sequences, error recovery
 - **P1 (Parser)**: Complete — stylesheet/rules/declarations/blocks/functions, !important detection, AST dump
-- **P2 (Selectors)**: Not started
+- **P2a (Selectors Core)**: Complete — type/universal/class/id/attribute(7)/pseudo-class/pseudo-element, 4 combinators, specificity, integrated into parser
 - **P3 (Advanced)**: Not started
 
 ## Specifications Implemented
