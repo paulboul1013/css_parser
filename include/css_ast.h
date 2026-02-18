@@ -17,6 +17,9 @@ typedef enum {
     CSS_NODE_FUNCTION
 } css_node_type;
 
+/* Forward declaration for selector (defined in css_selector.h) */
+struct css_selector_list;
+
 /* Forward declarations */
 typedef struct css_component_value css_component_value;
 typedef struct css_simple_block css_simple_block;
@@ -77,6 +80,7 @@ struct css_qualified_rule {
     size_t prelude_count;
     size_t prelude_cap;
     css_simple_block *block;
+    struct css_selector_list *selectors;  /* parsed selector list (may be NULL) */
 };
 
 /* Rule: union wrapper for at-rule or qualified rule */

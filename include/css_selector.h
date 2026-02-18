@@ -92,7 +92,7 @@ typedef struct {
  * Selector list: comma-separated complex selectors
  * e.g. div > .foo, #bar
  * ================================================================ */
-typedef struct {
+typedef struct css_selector_list {
     css_complex_selector **selectors;
     size_t count;
     size_t cap;

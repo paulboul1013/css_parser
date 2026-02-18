@@ -944,3 +944,69 @@ parse_attribute_selector(block)
   ├─ 讀取 attr_value (ident/string)
   └─ 讀取 case flag (i/s)
 ```
+
+## P2b Task 7: Selector 解析整合到 AST 和 Parser
+
+### 背景知識
+
+- **整合目的**: 將已實作的 selector 解析功能（Tasks 1-6）整合到主解析管線中
+- **Forward Declaration**: `css_ast.h` 不能 include `css_selector.h`（因為 `css_selector.h` 已經 include `css_ast.h`，會造成循環依賴），所以使用 `struct css_selector_list;` forward declaration
+- **命名 struct**: 為了讓 forward declaration 能運作，`css_selector.h` 中的 `css_selector_list` 從匿名 struct（`typedef struct { ... } css_selector_list;`）改為命名 struct（`typedef struct css_selector_list { ... } css_selector_list;`）
+- **後處理模式**: selector 解析作為 parser 的後處理步驟，在 `consume_list_of_rules()` 完成後，遍歷所有 qualified rule 並解析其 prelude 為 selector list
+
+### 修改內容
+
+1. **include/css_selector.h**: 將 `css_selector_list` 改為命名 struct
+   ```c
+   typedef struct css_selector_list { ... } css_selector_list;
+   ```
+
+2. **include/css_ast.h**:
+   - 加入 `struct css_selector_list;` forward declaration
+   - 在 `css_qualified_rule` 結構中加入 `struct css_selector_list *selectors;` 欄位
+
+3. **src/css_ast.c**:
+   - `#include "css_selector.h"`
+   - 在 `css_qualified_rule_free()` 中呼叫 `css_selector_list_free(qr->selectors)`
+
+4. **src/css_parser.c**:
+   - `#include "css_selector.h"`
+   - 在 `css_parse_stylesheet()` 中加入 selector 後處理迴圈
+   - 在 `css_parse_dump()` 的 QUALIFIED_RULE case 中呼叫 `css_selector_dump()`
+
+### 流程架構
+
+```
+css_parse_stylesheet()
+  ├─ 建立 tokenizer
+  ├─ consume_list_of_rules() → 產生原始 AST
+  ├─ 後處理: selector 解析 ← Task 7 新增
+  │   └─ 遍歷 rules:
+  │       └─ QUALIFIED_RULE → css_parse_selector_list(prelude)
+  │           → qr->selectors = 解析結果
+  ├─ 清理 parser state
+  └─ 回傳 stylesheet
+
+css_parse_dump()
+  └─ QUALIFIED_RULE:
+      ├─ 印出 "QUALIFIED_RULE"
+      ├─ css_selector_dump(qr->selectors) ← Task 7 新增
+      ├─ 印出 prelude
+      └─ 傾印 block（含宣告偵測）
+```
+
+### 輸出格式
+
+```
+STYLESHEET
+  QUALIFIED_RULE
+    SELECTOR_LIST (1)        ← Task 7 新增
+      COMPLEX_SELECTOR
+        COMPOUND_SELECTOR
+          <type "body">
+    prelude:
+      <ident "body">
+    BLOCK {}
+      DECLARATION "color"
+        <ident "red">
+```

@@ -3,6 +3,7 @@
 #include "css_parser.h"
 #include "css_tokenizer.h"
 #include "css_ast.h"
+#include "css_selector.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -513,6 +514,18 @@ css_stylesheet *css_parse_stylesheet(const char *input, size_t length)
 
     consume_list_of_rules(&parser, sheet, true);
 
+    /* Post-process: parse selectors from qualified rule preludes */
+    for (size_t i = 0; i < sheet->rule_count; i++) {
+        css_rule *rule = sheet->rules[i];
+        if (rule && rule->type == CSS_NODE_QUALIFIED_RULE) {
+            css_qualified_rule *qr = rule->u.qualified_rule;
+            if (qr && qr->prelude_count > 0) {
+                qr->selectors = css_parse_selector_list(
+                    qr->prelude, qr->prelude_count);
+            }
+        }
+    }
+
     /* Clean up parser state */
     if (parser.current_token) {
         css_token_free(parser.current_token);
@@ -718,6 +731,9 @@ void css_parse_dump(css_stylesheet *sheet, FILE *out)
             if (!qr) break;
             dump_indent_p(out, 1);
             fprintf(out, "QUALIFIED_RULE\n");
+            if (qr->selectors) {
+                css_selector_dump(qr->selectors, out, 2);
+            }
             if (qr->prelude_count > 0) {
                 dump_indent_p(out, 2);
                 fprintf(out, "prelude:\n");

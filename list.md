@@ -155,6 +155,15 @@
   - AddressSanitizer 驗證：零記憶體錯誤
   - make test-all 全部通過
 
+- [x] P2b Task 7: Selector 解析整合到 AST 和 Parser
+  - css_selector.h: css_selector_list 改為命名 struct（支援 forward declaration）
+  - css_ast.h: 加入 `struct css_selector_list;` forward declaration + selectors 欄位
+  - css_ast.c: `#include "css_selector.h"` + qualified_rule_free 釋放 selectors
+  - css_parser.c: `#include "css_selector.h"` + 後處理 selector 解析 + dump 整合
+  - 編譯零警告驗證通過
+  - make test-all 全部通過
+
 ### 未完成
 
-- [ ] P2b: Selector 進階功能（:not(), :is(), :has(), :nth-child() 等）
+- [ ] P2b Task 8: Selector 測試檔案 + ASAN 驗證
+- [ ] P2c: Selector 進階功能（:not(), :is(), :has(), :nth-child() 等）

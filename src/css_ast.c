@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "css_ast.h"
+#include "css_selector.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -172,6 +173,7 @@ void css_qualified_rule_free(css_qualified_rule *qr)
     }
     free(qr->prelude);
     css_simple_block_free(qr->block);
+    css_selector_list_free(qr->selectors);
     free(qr);
 }
 
