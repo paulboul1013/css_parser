@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -pedantic -O2 -g
 
-SRC = src/css_token.c src/css_tokenizer.c src/css_ast.c src/css_parser.c
+SRC = src/css_token.c src/css_tokenizer.c src/css_ast.c src/css_parser.c src/css_selector.c
 
 all: css_parse
 

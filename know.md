@@ -722,5 +722,120 @@ CSSPARSER_PARSE_ERRORS=1 ./css_parse_asan tests/errors.css
 
 - **P0 Tokenizer**: 完成 ✓（24 種 token、UTF-8 解碼、前處理、錯誤恢復）
 - **P1 Parser**: 完成 ✓（AST 產生、宣告解析、!important、consume-based 演算法）
-- **P2 Selectors**: 未開始（CSS Selectors Level 4）
+- **P2 Selectors**: 進行中（CSS Selectors Level 4）
 - **P3 Advanced**: 未開始（Nesting、Media Queries、calc()）
+
+## P2a: Selector 資料結構與生命週期 (Tasks 1-3)
+
+### 背景知識
+
+- **CSS Selectors Level 4**: 定義了 CSS 選擇器的語法和語意
+- **選擇器層次結構**: selector_list > complex_selector > compound_selector > simple_selector
+  - **selector_list**: 逗號分隔的 complex selector 列表（如 `div, .foo`）
+  - **complex_selector**: 由 combinator 連接的 compound selector 序列（如 `div > .foo + p`）
+  - **compound_selector**: 不含 combinator 的 simple selector 序列（如 `div.foo#bar`）
+  - **simple_selector**: 最基本的選擇器單位
+
+- **7 種 simple selector 類型**:
+  - `SEL_TYPE` — 元素類型（如 `div`, `p`）
+  - `SEL_UNIVERSAL` — 萬用選擇器 `*`
+  - `SEL_CLASS` — class 選擇器（如 `.foo`）
+  - `SEL_ID` — id 選擇器（如 `#bar`）
+  - `SEL_ATTRIBUTE` — 屬性選擇器（如 `[href^="https"]`）
+  - `SEL_PSEUDO_CLASS` — 偽類（如 `:hover`）
+  - `SEL_PSEUDO_ELEMENT` — 偽元素（如 `::before`）
+
+- **7 種屬性匹配運算子**:
+  - `ATTR_EXISTS` — `[attr]` 存在
+  - `ATTR_EXACT` — `[attr=val]` 完全匹配
+  - `ATTR_INCLUDES` — `[attr~=val]` 空格分隔列表包含
+  - `ATTR_DASH` — `[attr|=val]` 完全匹配或前綴加連字號
+  - `ATTR_PREFIX` — `[attr^=val]` 開頭匹配
+  - `ATTR_SUFFIX` — `[attr$=val]` 結尾匹配
+  - `ATTR_SUBSTRING` — `[attr*=val]` 子字串包含
+
+- **4 種 combinator**:
+  - `COMB_DESCENDANT` — 空格（後代）
+  - `COMB_CHILD` — `>` （子元素）
+  - `COMB_NEXT_SIBLING` — `+`（相鄰兄弟）
+  - `COMB_SUBSEQUENT_SIBLING` — `~`（一般兄弟）
+
+- **Specificity (a, b, c)**:
+  - a: #id 選擇器計數
+  - b: .class, [attr], :pseudo-class 計數
+  - c: type, ::pseudo-element 計數
+
+### 資料結構
+
+```c
+css_simple_selector {
+    type, name, attr_match, attr_name, attr_value, attr_case_insensitive
+}
+
+css_compound_selector {
+    selectors[], count, cap   /* simple selector 動態陣列 */
+}
+
+css_complex_selector {
+    compounds[], combinators[], count, cap
+    /* combinators[i] 位於 compounds[i] 和 compounds[i+1] 之間 */
+}
+
+css_selector_list {
+    selectors[], count, cap   /* complex selector 動態陣列 */
+}
+```
+
+### API
+
+```c
+/* 生命週期 */
+css_simple_selector   *css_simple_selector_create(css_simple_selector_type type);
+void                   css_simple_selector_free(css_simple_selector *sel);
+css_compound_selector *css_compound_selector_create(void);
+void                   css_compound_selector_free(css_compound_selector *comp);
+void                   css_compound_selector_append(comp, sel);
+css_complex_selector  *css_complex_selector_create(void);
+void                   css_complex_selector_free(css_complex_selector *cx);
+void                   css_complex_selector_append(cx, comp, comb);
+css_selector_list     *css_selector_list_create(void);
+void                   css_selector_list_free(css_selector_list *list);
+void                   css_selector_list_append(list, cx);
+
+/* 解析（stub） */
+css_selector_list *css_parse_selector_list(css_component_value **values, size_t count);
+
+/* Specificity（stub） */
+css_specificity css_selector_specificity(css_complex_selector *sel);
+
+/* 傾印 */
+void css_selector_dump(css_selector_list *list, FILE *out, int depth);
+```
+
+### Dump 輸出格式
+
+```
+SELECTOR_LIST (2)
+  COMPLEX_SELECTOR
+    COMPOUND_SELECTOR
+      <type "div">
+    COMBINATOR ">"
+    COMPOUND_SELECTOR
+      <class "foo">
+  COMPLEX_SELECTOR
+    COMPOUND_SELECTOR
+      <id "bar">
+```
+
+屬性選擇器格式: `<attribute [href^="https"]>`
+
+### 記憶體管理模式
+
+- 與 css_ast.c 完全一致：calloc 零初始化、strdup 字串擁有權、realloc 動態陣列（cap = cap ? cap*2 : 4）
+- `css_complex_selector_append` 中 combinators 陣列與 compounds 陣列同步擴容
+- 第一個 compound append 時 comb 參數被忽略（因為沒有前一個 compound）
+
+### 檔案
+
+- `include/css_selector.h` — 所有 enum/struct/API 宣告
+- `src/css_selector.c` — 生命週期 + dump + stub

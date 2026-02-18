@@ -122,3 +122,25 @@
 ## P0 + P1 原型完成
 
 所有 14 個任務已完成。Tokenizer（24 種 token）和 Parser（AST 產生）均通過完整測試和記憶體安全驗證。
+
+---
+
+## P2: Selector 解析
+
+### 已完成
+
+- [x] P2a Task 1-3: Selector 資料結構、生命週期、dump
+  - include/css_selector.h 標頭檔（7 種 simple selector type、7 種 attr match、4 種 combinator、specificity、所有 struct/API 宣告）
+  - src/css_selector.c 生命週期函式（create/free/append，遵循 calloc/realloc 模式）
+  - css_selector_dump() 傾印函式（SELECTOR_LIST / COMPLEX / COMPOUND / simple 層次輸出）
+  - css_parse_selector_list() stub（回傳 NULL）
+  - css_selector_specificity() stub（回傳 {0,0,0}）
+  - Makefile 更新（SRC 加入 src/css_selector.c）
+  - 編譯零警告驗證通過
+  - make test-all 全部通過
+
+### 未完成
+
+- [ ] P2a Task 4-5: Selector 解析器（css_parse_selector_list 實作）
+- [ ] P2a Task 6: Specificity 計算（css_selector_specificity 實作）
+- [ ] P2b: Selector 進階功能（:not(), :is(), :has(), :nth-child() 等）
